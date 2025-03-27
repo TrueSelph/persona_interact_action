@@ -1,0 +1,88 @@
+name: Release Action to Jivas Package Registry
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    name: Check Package Version
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check.outputs.version_changed }}
+      new_version: ${{ steps.check.outputs.new_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get previous version from Git tags
+        id: get_previous_version
+        run: |
+          git fetch --tags
+          VERSION_TAG=$(git tag --list "v*" --sort=-v:refname | head -n 1 | sed 's/^v//')
+          echo "previous_version=${VERSION_TAG:-0.0.0}" >> $GITHUB_ENV
+          echo "Previous version: $VERSION_TAG"
+          echo "previous_version=${VERSION_TAG:-0.0.0}" >> $GITHUB_OUTPUT
+
+      - name: Get new version from info.yaml
+        id: check
+        run: |
+          NEW_VERSION=$(grep -oP '(?<=^  version: )\d+\.\d+\.\d+' persona_interact_action/info.yaml)
+          echo "Detected package version: $NEW_VERSION"
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_ENV
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+
+          if [ "$NEW_VERSION" == "${{ env.previous_version }}" ]; then
+            echo "Version has not changed."
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version has changed."
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+          fi
+
+  publish:
+    name: Publish Action & Create Release
+    if: ${{ needs.check-version.outputs.version_changed }} == 'true'
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12
+
+      - name: Install Jivas CLI
+        run: pip install jvcli
+
+      - name: Publish to Jivas Package Registry
+        run: |
+          echo "Publishing new version to Jivas Package Registry..."
+          jvcli login --username ${{ secrets.JPR_ADMIN_USERNAME }} --password ${{ secrets.JPR_ADMIN_PASSWORD }}
+          jvcli publish action --path persona_interact_action --visibility public
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "admin@trueselph.com"
+          git config --global user.name "TrueSelph Inc."
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Creating GitHub release..."
+          VERSION=${{ needs.check-version.outputs.new_version }}
+          git tag -a "v$VERSION" -m "Release version $VERSION"
+          git push origin "v$VERSION"
+          gh release create "v$VERSION" --title "Release version $VERSION" --notes "Release version $VERSION" --generate-notes
+          echo "Release created successfully."
