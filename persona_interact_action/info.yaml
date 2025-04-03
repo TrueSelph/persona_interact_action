@@ -2,7 +2,7 @@ package:
   name: jivas/persona_interact_action
   author: V75 Inc.
   architype: PersonaInteractAction
-  version: 0.0.1
+  version: 0.0.2
   meta:
     title: Persona Interact Action
     description: Driven by a modular prompt to provide role, history and context for LLM chat and/or retrieval augmented generation.
