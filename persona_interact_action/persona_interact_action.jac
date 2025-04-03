@@ -16,18 +16,18 @@ node PersonaInteractAction :InteractAction: {
 
     has timezone:str = "America/Guyana";
     has history:bool = True;
-    has user_model:bool = True;
+    has user_model:bool = False;
     has history_size:int = 3;
     has max_statement_length:int = 200;
     has model_action:str = "LangChainModelAction";
     has model_name:str = "gpt-4o";
-    has model_temperature:float = 0.7;
+    has model_temperature:float = 0.4;
     has model_max_tokens:int = 2048;
-    has prompt:str = "Your name is Agent. Refer to the user as '{user}', if not None. Keep in mind '{date}' and '{time}' to be aware of the current date and time.  {directives}";
+    has prompt:str = "Your name is Agent. Refer to the user as '{user}', if not None. Keep in mind '{date}' and '{time}' to be aware of the current date and time. {directives}";
     has user_model_directive:str = "Employ the user information below as is relevant to inform your final response: \n\n{{user_model}}";
     has channel_format_directive:dict = {
-        "whatsapp": "Please format your message using the following WhatsApp formats:\n- Italic: text\n- Bold: text\n- Strikethrough: text\n- Monospace: text\n- Bulleted list: * text or - text\n- Numbered list: 1. text\n- Quote: > text\n- Inline code: text\n- provide links as plain text (no clickable links)",
-        "facebook": "Please format your message using the following Facebook formats:\n- Italic: _Text_\n- Bold: *Text*\n- Strikethrough: ~Text~\n- Monospace: `Text`\n- Codeblock: ```Text```"
+        "whatsapp": "Format your message using the following WhatsApp formats:\n- Italic: text\n- Bold: text\n- Strikethrough: text\n- Monospace: text\n- Bulleted list: * text or - text\n- Numbered list: 1. text\n- Quote: > text\n- Inline code: text\n- provide links as plain text (no clickable links)",
+        "facebook": "Format your message using the following Facebook formats:\n- Italic: _Text_\n- Bold: *Text*\n- Strikethrough: ~Text~\n- Monospace: `Text`\n- Codeblock: ```Text```"
     };
 
     can post_register() {
@@ -156,14 +156,8 @@ node PersonaInteractAction :InteractAction: {
     can healthcheck() -> bool {
         try {
             if(
-                self.timezone and
-                self.max_statement_length > 0 and
-                self.model_action and
-                self.model_name and
-                self.model_max_tokens > 0 and
                 self.prompt and
-                self.user_model_directive and
-                self.channel_format_directive
+                (model_action := self.get_agent().get_actions().get(action_label=self.model_action))
             ){
                 return True;
             }
