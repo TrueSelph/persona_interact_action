@@ -3,3 +3,6 @@
 
 ## 0.0.2
 - Updated healthcheck and action defaults
+
+## 0.0.3
+- Updated action dependency
