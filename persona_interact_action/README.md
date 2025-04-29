@@ -1,7 +1,6 @@
 # Persona Interact Action
 
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/TrueSelph/persona_interact_action)
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/TrueSelph/persona_interact_action/test-persona_interact_action.yaml)
 ![GitHub issues](https://img.shields.io/github/issues/TrueSelph/persona_interact_action)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/TrueSelph/persona_interact_action)
 ![GitHub](https://img.shields.io/github/license/TrueSelph/persona_interact_action)
@@ -28,7 +27,7 @@ This action is designed to enhance large language model (LLM) interactions by pr
 
 - **Jivas:** `^2.0.0`
 - **Actions:**
-  - `jivas/langchain_model_action`: `0.0.1`
+  - `jivas/langchain_model_action`: `>=0.0.1`
 
 ---
 
