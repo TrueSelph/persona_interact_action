@@ -4,7 +4,7 @@ import:py traceback;
 import:py from logging { Logger }
 import:py from jivas.agent.modules.agentlib.utils { Utils }
 import:jac from jivas.agent.action.interact_action { InteractAction }
-import:jac from jivas.agent.memory.interaction_response { TextInteractionMessage }
+import:jac from jivas.agent.memory.interaction_response { TextInteractionMessage, SilentInteractionMessage }
 import:jac from jivas.agent.action.interact_graph_walker { interact_graph_walker }
 
 
@@ -16,18 +16,82 @@ node PersonaInteractAction :InteractAction: {
 
     has timezone:str = "America/Guyana";
     has history:bool = True;
-    has user_model:bool = False;
     has history_size:int = 3;
-    has max_statement_length:int = 200;
+    has max_statement_length:int = 500;
     has model_action:str = "LangChainModelAction";
     has model_name:str = "gpt-4o";
-    has model_temperature:float = 0.4;
-    has model_max_tokens:int = 2048;
+    has model_temperature:float = 0.3;
+    has model_max_tokens:int = 4096;
     has prompt:str = "Your name is Agent. Refer to the user as '{user}', if not None. Keep in mind '{date}' and '{time}' to be aware of the current date and time. {directives}";
-    has user_model_directive:str = "Employ the user information below as is relevant to inform your final response: \n\n{{user_model}}";
-    has channel_format_directive:dict = {
-        "whatsapp": "Format your message using the following WhatsApp formats:\n- Italic: text\n- Bold: text\n- Strikethrough: text\n- Monospace: text\n- Bulleted list: * text or - text\n- Numbered list: 1. text\n- Quote: > text\n- Inline code: text\n- provide links as plain text (no clickable links)",
-        "facebook": "Format your message using the following Facebook formats:\n- Italic: _Text_\n- Bold: *Text*\n- Strikethrough: ~Text~\n- Monospace: `Text`\n- Codeblock: ```Text```"
+    has channel_format_directives: dict = {
+        "facebook": (
+            "Structure Facebook content with these formatting rules:\n"
+            "- Italic: Wrap text with underscores (_text_)\n"
+            "- Bold: Wrap text with asterisks (*text*)\n"
+            "- Strikethrough: Wrap text with tildes (~text~)\n"
+            "- URLs: Use plain format without markup (example: https://example.com)\n"
+            "- Separate paragraphs with line breaks"
+        ),
+
+        "whatsapp": (
+            "Structure WhatsApp messages with these rules:\n"
+            "- Italic: Surround with underscores (_text_)\n"
+            "- Bold: Surround with asterisks (*text*)\n"
+            "- Strikethrough: Surround with tildes (~text~)\n"
+            "- Bullet lists: Start lines with * or -\n"
+            "- Numbered lists: Begin with 1. 2. 3.\n"
+            "- Quotes: Prefix lines with > symbol\n"
+            "- URLs: Use plain text format only\n"
+            "- Separate sections with line breaks"
+        ),
+
+        "instagram": (
+            "Structure Instagram content with:\n"
+            "- Bold: Surround text with asterisks (*text*)\n"
+            "- Italic: Surround text with underscores (_text_)\n"
+            "- URLs: Place only in bio or caption as plain text\n"
+            "- Use single line breaks between paragraphs\n"
+            "- Maximum 30 hashtags at caption end"
+        ),
+
+        "twitter": (
+            "Structure Twitter/X posts with:\n"
+            "- Bold: Use asterisks (*text*)\n"
+            "- Italic: Use underscores (_text_)\n"
+            "- URLs: Prefer shortened versions (like bit.ly/example)\n"
+            "- Threads: Start with (1/3) indicator\n"
+            "- Keep under 280 characters per tweet"
+        ),
+
+        "linkedin": (
+            "Structure LinkedIn posts with:\n"
+            "- Bold: Asterisks around text (*text*)\n"
+            "- Italic: Underscores around text (_text_)\n"
+            "- Bullets: Start lines with * or -\n"
+            "- URLs: Include as plain text with context\n"
+            "- Sections: Separate with --- on own line\n"
+            "- Paragraphs: Maximum 5 lines each"
+        ),
+
+        "email": (
+            "Structure emails with:\n"
+            "- Bold: Surround with asterisks (*important*)\n"
+            "- Italic: Surround with underscores (_emphasis_)\n"
+            "- Lists: Use * or - for bullet points\n"
+            "- Quotes: Begin lines with > symbol\n"
+            "- URLs: Plain text with descriptive context\n"
+            "- Subject lines: Under 60 characters\n"
+            "- Include formal greetings/closings"
+        ),
+
+        "sms": (
+            "Structure SMS messages with:\n"
+            "- No special formatting symbols\n"
+            "- URLs: Shorten when possible\n"
+            "- Length: Maximum 160 characters\n"
+            "- Line breaks: Use basic separation\n"
+            "- Avoid emojis unless requested"
+        )
     };
 
     can post_register() {
@@ -38,7 +102,6 @@ node PersonaInteractAction :InteractAction: {
                 intent_interact_action_node.exceptions += [self.get_type()];
             }
         }
-
     }
 
     can touch(visitor: interact_graph_walker) -> bool {
@@ -47,11 +110,10 @@ node PersonaInteractAction :InteractAction: {
         if (visitor.utterance and not visitor.interaction_node.has_response()) {
             return True;
         }
-
         return False;
     }
 
-    can execute(visitor: interact_graph_walker) -> dict {
+    can execute(visitor: interact_graph_walker) {
 
         # format response by channel
         self.handle_channel_format(visitor=visitor);
@@ -61,16 +123,6 @@ node PersonaInteractAction :InteractAction: {
 
         date = Utils.date_now(timezone=self.timezone, date_format='%A, %d %B, %Y');
         time = Utils.date_now(timezone=self.timezone, date_format='%I:%M %p');
-
-        if (self.user_model) {
-            user_model_content = visitor.frame_node.variable_get(key="user_model");
-            if (user_model_content) {
-                user_model_prompt = Utils.replace_placeholders(self.user_model_directive, {'user_model': user_model_content});
-                if (user_model_prompt) {
-                    visitor.interaction_node.add_directive(directive=user_model_prompt);
-                }
-            }
-        }
 
         # prepare directives
         directives = self.prepare_persona_task_directives( visitor.interaction_node.get_directives() );
@@ -96,37 +148,45 @@ node PersonaInteractAction :InteractAction: {
             ];
         }
 
-        if(model_action := self.get_agent().get_actions().get(action_label=self.model_action)) {
+        model_action := self.get_agent().get_action(action_label=self.model_action);
 
-            if( model_action_result := model_action.call_model(
-                prompt_messages = prompt_messages,
-                prompt_variables = {
-                    "user": user,
-                    "date": date,
-                    "time": time,
-                    "directives": directives,
-                    "utterance": visitor.utterance
-                },
-                kwargs = {
-                    "model_name": self.model_name,
-                    "model_temperature": self.model_temperature,
-                    "model_max_tokens": self.model_max_tokens
-                },
-                interaction_node = visitor.interaction_node
-            )) {
-
-                # set the interaction message+
-                interaction_message = model_action_result.get_result();
-                if not interaction_message {
-                    interaction_message = "...";
-                }
-
-                visitor.interaction_node.set_message( TextInteractionMessage(content = interaction_message) );
-            }
-
+        if not model_action {
+            return;
         }
 
-        return visitor.export();
+        model_action_result = model_action.call_model(
+            prompt_messages=prompt_messages,
+            prompt_variables={
+                "user": user,
+                "date": date,
+                "time": time,
+                "directives": directives,
+                "utterance": visitor.utterance
+            },
+            kwargs={
+                "model_name": self.model_name,
+                "model_temperature": self.model_temperature,
+                "model_max_tokens": self.model_max_tokens,
+                "streaming": visitor.streaming
+            },
+            interaction_node=visitor.interaction_node,
+            streaming=visitor.streaming
+        );
+
+        if not model_action_result {
+            return;
+        }
+
+        if visitor.streaming {
+            # convey the generator when streaming
+            visitor.generator = model_action_result.get_generator();
+        } else {
+            # set the interaction message when not streaming
+            interaction_message = model_action_result.get_result() or "...";
+            visitor.interaction_node.set_message(
+                TextInteractionMessage(content=interaction_message)
+            );
+        }
     }
 
     can prepare_persona_task_directives(directives:list) -> str{
@@ -148,8 +208,8 @@ node PersonaInteractAction :InteractAction: {
     can handle_channel_format(visitor: interact_graph_walker) -> dict {
         channel = visitor.interaction_node.channel;
 
-        if(channel in self.channel_format_directive) {
-            visitor.interaction_node.add_directive(directive=self.channel_format_directive[channel]);
+        if(channel in self.channel_format_directives) {
+            visitor.interaction_node.add_directive(directive=self.channel_format_directives[channel]);
         }
     }
 
