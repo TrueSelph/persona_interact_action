@@ -11,3 +11,6 @@
 - Updated channel format directives
 - Removed user model action functionality (to become its own action)
 - Added streaming support using the latest ModelAction in JIVAS 2.0.0-alpha.43
+
+# 0.1.0
+- Updated to support Jivas 2.1.0

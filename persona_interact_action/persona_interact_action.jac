@@ -1,14 +1,14 @@
-import:py json;
-import:py logging;
-import:py traceback;
-import:py from logging { Logger }
-import:py from jivas.agent.modules.agentlib.utils { Utils }
-import:jac from jivas.agent.action.interact_action { InteractAction }
-import:jac from jivas.agent.memory.interaction_response { TextInteractionMessage, SilentInteractionMessage }
-import:jac from jivas.agent.action.interact_graph_walker { interact_graph_walker }
+import json;
+import logging;
+import traceback;
+import from logging { Logger }
+import from jivas.agent.modules.agentlib.utils { Utils }
+import from jivas.agent.action.interact_action { InteractAction }
+import from jivas.agent.memory.interaction_response { TextInteractionMessage, SilentInteractionMessage }
+import from jivas.agent.action.interact_graph_walker { interact_graph_walker }
 
 
-node PersonaInteractAction :InteractAction: {
+node PersonaInteractAction(InteractAction) {
     # driven by a modular prompt to provide role, history and context for LLM chat and/or retrieval augmented generation
 
     # set up logger
@@ -29,7 +29,7 @@ node PersonaInteractAction :InteractAction: {
             "- Italic: Wrap text with underscores (_text_)\n"
             "- Bold: Wrap text with asterisks (*text*)\n"
             "- Strikethrough: Wrap text with tildes (~text~)\n"
-            "- URLs: Use plain format without markup (example: https://example.com)\n"
+            "- URLs: Display URLs as-is, no markdown formatting.\n"
             "- Separate paragraphs with line breaks"
         ),
 
@@ -41,7 +41,7 @@ node PersonaInteractAction :InteractAction: {
             "- Bullet lists: Start lines with * or -\n"
             "- Numbered lists: Begin with 1. 2. 3.\n"
             "- Quotes: Prefix lines with > symbol\n"
-            "- URLs: Use plain text format only\n"
+            "- URLs: Display URLs as-is, no markdown formatting.\n"
             "- Separate sections with line breaks"
         ),
 
@@ -49,7 +49,7 @@ node PersonaInteractAction :InteractAction: {
             "Structure Instagram content with:\n"
             "- Bold: Surround text with asterisks (*text*)\n"
             "- Italic: Surround text with underscores (_text_)\n"
-            "- URLs: Place only in bio or caption as plain text\n"
+            "- URLs: Display URLs as-is, no markdown formatting.\n"
             "- Use single line breaks between paragraphs\n"
             "- Maximum 30 hashtags at caption end"
         ),
@@ -58,7 +58,7 @@ node PersonaInteractAction :InteractAction: {
             "Structure Twitter/X posts with:\n"
             "- Bold: Use asterisks (*text*)\n"
             "- Italic: Use underscores (_text_)\n"
-            "- URLs: Prefer shortened versions (like bit.ly/example)\n"
+            "- URLs: Display URLs as-is, no markdown formatting.\n"
             "- Threads: Start with (1/3) indicator\n"
             "- Keep under 280 characters per tweet"
         ),
@@ -68,7 +68,7 @@ node PersonaInteractAction :InteractAction: {
             "- Bold: Asterisks around text (*text*)\n"
             "- Italic: Underscores around text (_text_)\n"
             "- Bullets: Start lines with * or -\n"
-            "- URLs: Include as plain text with context\n"
+            "- URLs: Display URLs as-is, no markdown formatting.\n"
             "- Sections: Separate with --- on own line\n"
             "- Paragraphs: Maximum 5 lines each"
         ),
@@ -79,7 +79,7 @@ node PersonaInteractAction :InteractAction: {
             "- Italic: Surround with underscores (_emphasis_)\n"
             "- Lists: Use * or - for bullet points\n"
             "- Quotes: Begin lines with > symbol\n"
-            "- URLs: Plain text with descriptive context\n"
+            "- URLs: Display URLs as-is, no markdown formatting.\n"
             "- Subject lines: Under 60 characters\n"
             "- Include formal greetings/closings"
         ),
@@ -94,7 +94,7 @@ node PersonaInteractAction :InteractAction: {
         )
     };
 
-    can post_register() {
+    def post_register() {
         # to ensure compatibility, this action is added to the exception list in intent_classifier
 
         if(intent_interact_action_node := self.get_agent().get_actions().get(action_label='IntentInteractAction')) {
@@ -104,16 +104,14 @@ node PersonaInteractAction :InteractAction: {
         }
     }
 
-    can touch(visitor: interact_graph_walker) -> bool {
+    def touch(visitor:interact_graph_walker) -> bool {
         # authorize, redirect or deny the interact walker here
         # only executes if response message is empty
-        if (visitor.utterance and not visitor.interaction_node.has_response()) {
-            return True;
-        }
+        return (visitor.utterance and not visitor.interaction_node.has_response());
         return False;
     }
 
-    can execute(visitor: interact_graph_walker) {
+    def execute(visitor:interact_graph_walker) -> None {
 
         # format response by channel
         self.handle_channel_format(visitor=visitor);
@@ -163,14 +161,11 @@ node PersonaInteractAction :InteractAction: {
                 "directives": directives,
                 "utterance": visitor.utterance
             },
-            kwargs={
-                "model_name": self.model_name,
-                "model_temperature": self.model_temperature,
-                "model_max_tokens": self.model_max_tokens,
-                "streaming": visitor.streaming
-            },
+            streaming=visitor.streaming,
             interaction_node=visitor.interaction_node,
-            streaming=visitor.streaming
+            model_name=self.model_name,
+            model_temperature=self.model_temperature,
+            model_max_tokens=self.model_max_tokens
         );
 
         if not model_action_result {
@@ -189,7 +184,7 @@ node PersonaInteractAction :InteractAction: {
         }
     }
 
-    can prepare_persona_task_directives(directives:list) -> str{
+    def prepare_persona_task_directives(directives:list) -> str {
         directives_str = "";
         index = 1;
 
@@ -205,7 +200,7 @@ node PersonaInteractAction :InteractAction: {
         return directives_str;
     }
 
-    can handle_channel_format(visitor: interact_graph_walker) -> dict {
+    def handle_channel_format(visitor: interact_graph_walker) -> dict {
         channel = visitor.interaction_node.channel;
 
         if(channel in self.channel_format_directives) {
@@ -213,7 +208,7 @@ node PersonaInteractAction :InteractAction: {
         }
     }
 
-    can healthcheck() -> bool {
+    def healthcheck() -> bool {
         try {
             if(
                 self.prompt and
