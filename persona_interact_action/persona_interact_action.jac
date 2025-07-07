@@ -5,7 +5,7 @@ import from logging { Logger }
 import from jivas.agent.modules.agentlib.utils { Utils }
 import from jivas.agent.action.interact_action { InteractAction }
 import from jivas.agent.memory.interaction_response { TextInteractionMessage, SilentInteractionMessage }
-import from jivas.agent.action.interact_graph_walker { interact_graph_walker }
+import from jivas.agent.action.agent_graph_walker { agent_graph_walker }
 
 
 node PersonaInteractAction(InteractAction) {
@@ -29,7 +29,7 @@ node PersonaInteractAction(InteractAction) {
             "- Italic: Wrap text with underscores (_text_)\n"
             "- Bold: Wrap text with asterisks (*text*)\n"
             "- Strikethrough: Wrap text with tildes (~text~)\n"
-            "- URLs: Display URLs as-is, no markdown formatting.\n"
+            "- URLs: Reformat all URLs to use raw URLs and not hyperlinks.\n"
             "- Separate paragraphs with line breaks"
         ),
 
@@ -41,7 +41,7 @@ node PersonaInteractAction(InteractAction) {
             "- Bullet lists: Start lines with * or -\n"
             "- Numbered lists: Begin with 1. 2. 3.\n"
             "- Quotes: Prefix lines with > symbol\n"
-            "- URLs: Display URLs as-is, no markdown formatting.\n"
+            "- URLs: Reformat all URLs to use raw URLs and not hyperlinks.\n"
             "- Separate sections with line breaks"
         ),
 
@@ -49,7 +49,7 @@ node PersonaInteractAction(InteractAction) {
             "Structure Instagram content with:\n"
             "- Bold: Surround text with asterisks (*text*)\n"
             "- Italic: Surround text with underscores (_text_)\n"
-            "- URLs: Display URLs as-is, no markdown formatting.\n"
+            "- URLs: Reformat all URLs to use raw URLs and not hyperlinks.\n"
             "- Use single line breaks between paragraphs\n"
             "- Maximum 30 hashtags at caption end"
         ),
@@ -58,7 +58,7 @@ node PersonaInteractAction(InteractAction) {
             "Structure Twitter/X posts with:\n"
             "- Bold: Use asterisks (*text*)\n"
             "- Italic: Use underscores (_text_)\n"
-            "- URLs: Display URLs as-is, no markdown formatting.\n"
+            "- URLs: Reformat all URLs to use raw URLs and not hyperlinks.\n"
             "- Threads: Start with (1/3) indicator\n"
             "- Keep under 280 characters per tweet"
         ),
@@ -68,7 +68,7 @@ node PersonaInteractAction(InteractAction) {
             "- Bold: Asterisks around text (*text*)\n"
             "- Italic: Underscores around text (_text_)\n"
             "- Bullets: Start lines with * or -\n"
-            "- URLs: Display URLs as-is, no markdown formatting.\n"
+            "- URLs: Reformat all URLs to use raw URLs and not hyperlinks.\n"
             "- Sections: Separate with --- on own line\n"
             "- Paragraphs: Maximum 5 lines each"
         ),
@@ -79,7 +79,7 @@ node PersonaInteractAction(InteractAction) {
             "- Italic: Surround with underscores (_emphasis_)\n"
             "- Lists: Use * or - for bullet points\n"
             "- Quotes: Begin lines with > symbol\n"
-            "- URLs: Display URLs as-is, no markdown formatting.\n"
+            "- URLs: Reformat all URLs to use raw URLs and not hyperlinks.\n"
             "- Subject lines: Under 60 characters\n"
             "- Include formal greetings/closings"
         ),
@@ -87,7 +87,7 @@ node PersonaInteractAction(InteractAction) {
         "sms": (
             "Structure SMS messages with:\n"
             "- No special formatting symbols\n"
-            "- URLs: Shorten when possible\n"
+            "- URLs: Reformat all URLs to use raw URLs and not hyperlinks.\n"
             "- Length: Maximum 160 characters\n"
             "- Line breaks: Use basic separation\n"
             "- Avoid emojis unless requested"
@@ -104,14 +104,13 @@ node PersonaInteractAction(InteractAction) {
         }
     }
 
-    def touch(visitor:interact_graph_walker) -> bool {
+    def touch(visitor:agent_graph_walker) -> bool {
         # authorize, redirect or deny the interact walker here
         # only executes if response message is empty
         return (visitor.utterance and not visitor.interaction_node.has_response());
-        return False;
     }
 
-    def execute(visitor:interact_graph_walker) -> None {
+    def execute(visitor:agent_graph_walker) -> None {
 
         # format response by channel
         self.handle_channel_format(visitor=visitor);
@@ -125,25 +124,24 @@ node PersonaInteractAction(InteractAction) {
         # prepare directives
         directives = self.prepare_persona_task_directives( visitor.interaction_node.get_directives() );
 
-        # prepare the final prompt with history.
+        # prepare the prompt with utterance
+        prompt_messages = [
+            {"system": self.prompt},
+            {"human": "{utterance}"}
+        ];
+
+        # add history to prompt if configured.
         if (self.history) {
             # grab the history
-            prompt_messages = [];
-
-            statements = visitor.frame_node.get_transcript_statements(interactions = self.history_size, max_statement_length = self.max_statement_length, with_events = True);
-
+            statements = visitor.frame_node.get_transcript_statements(
+                interactions = self.history_size,
+                max_statement_length = self.max_statement_length,
+                with_events = True
+            );
             if (statements) {
-                prompt_messages.extend(statements);
-                self.logger.debug(f"history: {json.dumps(statements)}");
+                # prepend statements to the prompt messages
+                prompt_messages = statements + prompt_messages;
             }
-
-            prompt_messages.extend([{"system": self.prompt}]);
-        } else {
-            # here we cater to whether we have context information or not..
-            prompt_messages = [
-                {"system": prompt},
-                {"human": "{utterance}"}
-            ];
         }
 
         model_action := self.get_agent().get_action(action_label=self.model_action);
@@ -200,7 +198,7 @@ node PersonaInteractAction(InteractAction) {
         return directives_str;
     }
 
-    def handle_channel_format(visitor: interact_graph_walker) -> dict {
+    def handle_channel_format(visitor: agent_graph_walker) -> dict {
         channel = visitor.interaction_node.channel;
 
         if(channel in self.channel_format_directives) {

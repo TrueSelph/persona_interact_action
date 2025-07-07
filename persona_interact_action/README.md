@@ -5,7 +5,7 @@
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/TrueSelph/persona_interact_action)
 ![GitHub](https://img.shields.io/github/license/TrueSelph/persona_interact_action)
 
-This action is designed to enhance large language model (LLM) interactions by providing a structured prompt with role, history, and context elements. As a core interact action, it serves a critical role in shaping conversations and facilitating retrieval-augmented generation. Configured as a singleton, it ensures dedicated handling of interaction flow, requiring the Jivas library version 2.1.0 and depending on the `langchain_model_action` for comprehensive functionality.
+This action is designed to enhance large language model (LLM) interactions by providing a structured prompt with role, history, and context elements. As a core interact action, it serves a critical role in shaping conversations and facilitating retrieval-augmented generation. Configured as a singleton, it ensures dedicated handling of interaction flow, requiring the Jivas library version 2.0.0 and depending on the `langchain_model_action` for comprehensive functionality.
 
 Now supports streaming responses when the `streaming` flag is set on interact calls, enabling real-time output for improved user experience.
 
@@ -27,9 +27,9 @@ Now supports streaming responses when the `streaming` flag is set on interact ca
 
 ## Dependencies
 
-- **Jivas:** `^2.1.0`
+- **Jivas:** `^2.0.0-alpha.43`
 - **Actions:**
-  - `jivas/langchain_model_action`: `~0.1.0`
+  - `jivas/langchain_model_action`: `~0.0.7`
 
 ---
 

@@ -13,6 +13,6 @@ package:
   dependencies:
     jivas: ~2.1.0
     actions:
-      jivas/langchain_model_action: ~0.1.0
+      jivas/langchain_model_action: "~0.1.0"
 
 
