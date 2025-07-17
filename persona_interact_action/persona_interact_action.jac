@@ -177,16 +177,11 @@ node PersonaInteractAction :InteractAction: {
             return;
         }
 
-        if visitor.streaming {
-            # convey the generator when streaming
-            visitor.generator = model_action_result.get_generator();
-        } else {
-            # set the interaction message when not streaming
-            interaction_message = model_action_result.get_result() or "...";
-            visitor.interaction_node.set_message(
-                TextInteractionMessage(content=interaction_message)
-            );
-        }
+        # set the interaction message
+        interaction_message = model_action_result.get_result() or "...";
+        visitor.interaction_node.set_message(
+            TextInteractionMessage(content=interaction_message)
+        );
     }
 
     can prepare_persona_task_directives(directives:list) -> str{
