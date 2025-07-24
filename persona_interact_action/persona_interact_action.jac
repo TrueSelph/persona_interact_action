@@ -125,10 +125,7 @@ node PersonaInteractAction(InteractAction) {
         directives = self.prepare_persona_task_directives( visitor.interaction_node.get_directives() );
 
         # prepare the prompt with utterance
-        prompt_messages = [
-            {"system": self.prompt},
-            {"human": "{utterance}"}
-        ];
+        prompt_messages = [];
 
         # add history to prompt if configured.
         if (self.history) {
@@ -140,12 +137,21 @@ node PersonaInteractAction(InteractAction) {
             );
             if (statements) {
                 # prepend statements to the prompt messages
-                prompt_messages = statements + prompt_messages;
+                prompt_messages = statements;
             }
         }
+        # add human message
+        prompt_messages.append({"human": "{utterance}"});
+
+        # add any active events in this interaction
+        if events := visitor.frame_node.get_active_event_statements() {
+            prompt_messages.append(events);
+        }
+
+        # add the system prompt last
+        prompt_messages.append({"system": self.prompt});
 
         model_action := self.get_agent().get_action(action_label=self.model_action);
-
         if not model_action {
             return;
         }
@@ -170,16 +176,11 @@ node PersonaInteractAction(InteractAction) {
             return;
         }
 
-        if visitor.streaming {
-            # convey the generator when streaming
-            visitor.generator = model_action_result.get_generator();
-        } else {
-            # set the interaction message when not streaming
-            interaction_message = model_action_result.get_result() or "...";
-            visitor.interaction_node.set_message(
-                TextInteractionMessage(content=interaction_message)
-            );
-        }
+        # set the interaction message
+        interaction_message = model_action_result.get_result() or "...";
+        visitor.interaction_node.set_message(
+            TextInteractionMessage(content=interaction_message)
+        );
     }
 
     def prepare_persona_task_directives(directives:list) -> str {
