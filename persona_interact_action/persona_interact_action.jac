@@ -147,7 +147,7 @@ node PersonaInteractAction(InteractAction) {
 
         # add any active events in this interaction
         if events := visitor.frame_node.get_active_event_statements() {
-            prompt_messages.append(events);
+            prompt_messages.extend(events);
         }
 
         # add the system prompt last
