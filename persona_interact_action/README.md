@@ -13,7 +13,7 @@ Now supports streaming responses when the `streaming` flag is set on interact ca
 
 - **Name:** `jivas/persona_interact_action`
 - **Author:** [V75 Inc.](https://v75inc.com/)
-- **Architype:** `PersonaInteractAction`
+- **archetype:** `PersonaInteractAction`
 
 ## Meta Information
 
