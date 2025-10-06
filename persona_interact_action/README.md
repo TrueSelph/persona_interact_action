@@ -29,7 +29,7 @@ Now supports streaming responses when the `streaming` flag is set on interact ca
 
 - **Jivas:** `^2.0.0-alpha.43`
 - **Actions:**
-  - `jivas/langchain_model_action`: `~0.0.7`
+  - `jivas/langchain_model_action`: `~0.1.2`
 
 ---
 
