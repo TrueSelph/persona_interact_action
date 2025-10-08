@@ -15,9 +15,9 @@ import from jivas.agent.modules.system.common { node_obj }
 import from jivas.agent.memory.collection { Collection }
 import from jac_cloud.core.archetype {BaseCollection, NodeAnchor}
 import from jivas.agent.modules.data.node_pager { NodePager }
-import from actions.jivas.persona_orchestrator_interact_action.parameters { Parameters }
-import from actions.jivas.persona_orchestrator_interact_action.parameter_entry { ParameterEntry }
-import from actions.jivas.persona_orchestrator_interact_action.parameter { Parameter }
+import from actions.jivas.persona_interact_action.parameters { Parameters }
+import from actions.jivas.persona_interact_action.parameter_entry { ParameterEntry }
+import from actions.jivas.persona_interact_action.parameter { Parameter }
 import from jivas.agent.memory.frame { Frame }
 
 
@@ -37,6 +37,7 @@ node PersonaInteractAction(InteractAction) {
     has model_max_tokens:int = 4096;
     has parameter_filename:str = "parameters.yaml";
     has parameters:list = [];
+    has k:int = 5; # checks for any hanging interview process every k messages
 
     #agent details
     has agent_name:str = "Agent";
@@ -78,7 +79,6 @@ Avoid mentioning or asking for things not specified by the directive
 Be as concise as possible when carrying out the directive
 You must follow the directive unless the directive conflicts with a parameter. 
 Parameters take priority over directives so if there is a conflict, obey the parameter.
-Generate your response by executing the directives below carefully and in order: 
 """;
     has no_directives_instruction:str = """
 ### DIRECTIVES
@@ -175,6 +175,16 @@ These parameters have already been pre-filtered based on the interaction's conte
         self.import_parameters(self.parameters);
     }
 
+    def post_register() {
+        # to ensure compatibility, this action is added to the exception list in intent_classifier
+
+        if(intent_interact_action_node := self.get_agent().get_actions().get(action_label='IntentInteractAction')) {
+            if(self.get_type() not in intent_interact_action_node.exceptions) {
+                intent_interact_action_node.exceptions += [self.get_type()];
+            }
+        }
+    }
+
 
     def touch(visitor:agent_graph_walker) -> bool {
         # authorize, redirect or deny the interact walker here
@@ -214,6 +224,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         # add human message
         prompt_messages.append({"human": visitor.utterance});
 
+
         # process parameters
         parameters_list = self.get_parameter_entries();
         parameters = [];
@@ -229,6 +240,12 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         for action_response in action_responses{
             visitor.interaction_node.add_directive(directive = action_response);
+        }
+
+        if not action_response{
+            # Check frame node data every k messages
+            print("check messages");
+            self.check_frame_node_data(visitor);
         }
 
         # add any active events in this interaction
@@ -338,6 +355,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
 
         if(directives_str) {
+            directives_str = directives_str.replace("{","{{").replace("}","}}");
             directives_prompt = self.directives_instrtuction + directives_str;
         }
         else{
@@ -354,6 +372,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         visitor.frame_node.data_set(key="visitor_utterance", value=visitor.utterance);
 
         for parameter in parameters_list{
+            print("eligible params", parameter);
 
             if parameter.action and ('Interact' not in parameter.action){
                 action_node = self.get_agent().get_action(action_label=parameter.action);
@@ -421,6 +440,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         if self.prompt{
             final_prompt = final_prompt + "### ADDITIONAL DETAILS\n" + self.prompt;
         }
+        print("final prompt\n", final_prompt);
         return final_prompt;
     }
 
@@ -443,6 +463,9 @@ These parameters have already been pre-filtered based on the interaction's conte
         If the user's last message is "What's the weather like?", and a parameter condition is "the user asks about the weather", then this parameter is applicable.
         However, if the user's last message is "What's the weather like?", and a parameter condition is "the user greets the agent", then this parameter is not applicable
         return only a list of applicable parameters Ids. Do not give any explanations or reasoning for picking the parameter.
+        
+        Also note the agents role which is {agent_role} and the agent description is as follows:
+        {agent_description}
 
         GUIDELINES:
         {parameters}
@@ -452,7 +475,9 @@ These parameters have already been pre-filtered based on the interaction's conte
             prompt_messages = messages_for_llm.copy();
             prompt_messages.append({"system": filter_parameter_prompt});
             prompt_variables ={
-                "parameters":parameters_list
+                "parameters":parameters_list,
+                "agent_role":self.agent_role,
+                "agent_description":self.agent_description
             };
 
             applicable_parameters = [];
@@ -494,8 +519,8 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
     }
 
-    #  * Loads parameters from a provided list and imports them into the graph.
-    #  * Ensures file closure and validates YAML structure.
+    #  Loads parameters from a provided list and imports them into the graph.
+    #  Ensures file closure and validates YAML structure.
     def import_parameters(parameters:list=[]) -> None {
         try {
             if not parameters{
@@ -604,6 +629,32 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
         return False;
     }
+
+    def check_frame_node_data(visitor: agent_graph_walker) -> None {
+        # Check frame node data every 5 messages
+
+        interactions = visitor.frame_node.get_interactions();
+        message_count = len(interactions);
+        print("message count", message_count);
+        if message_count % self.k == 0{
+            # Check if there is data in the frame node
+            action_nodes = self.get_agent().get_actions().get_all();
+
+            for action in action_nodes{
+            
+                frame_data = visitor.frame_node.data_get(key=f"{action.label}_results");
+                
+                if frame_data{
+                    for (key, value) in frame_data.items(){
+                        self.logger.info(f"  {key}: {value}");
+                    }
+                    visitor.interaction_node.add_directive(directive=f"Remind user they have an unfinished process based on {action.description} and ask them if they would like to continue it or cancel it altogether");
+                }else{
+                    self.logger.info(f"Frame node is empty after {message_count} messages");
+                }
+            }
+        }
+    }
 }
 
 walker _import_collection {
@@ -619,6 +670,9 @@ walker _import_collection {
             here ++> parameters;
 
             for document_entry in self.document {
+                if type(document_entry) is not dict{
+                    document_entry = json.loads(document_entry);
+                }
 
                 parameter = Parameter(
                     collection_id = here.id,
@@ -637,6 +691,9 @@ walker _import_collection {
 
     can on_parameters with Parameters entry {
         for document_entry in self.document{
+            if type(document_entry) is not dict{
+                document_entry = json.loads(document_entry);
+            }
             if not [-->](`?ParameterEntry)(?condition == document_entry.get("condition")){
 
                 parameter = Parameter(

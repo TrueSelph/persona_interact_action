@@ -25,9 +25,15 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
         
     col1, col2, col3 = st.columns([2, 4, 2])
     
+    # Pagination state
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = 1
+    if "per_page" not in st.session_state:
+        st.session_state.per_page = 10
+
     params = {
-        "page": st.session_state[list_key].get("page", 1),
-        "per_page": st.session_state[list_key].get("per_page", 10),
+        "page": st.session_state.current_page,
+        "per_page": st.session_state.per_page,
         "agent_id": agent_id,
         "reporting": True,
     }
@@ -38,22 +44,23 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
     if result and result.status_code == 200:
         payload = get_reports_payload(result)
         document_list = payload.get("items", [])
-        
+        total_pages = payload.get("total_pages", 1)
+        current_page = payload.get("page", 1)
+
         with col3:
             page_col1, page_col2, page_col3 = st.columns([1, 2, 1])
             with page_col1:
-                if payload.get("has_previous", False) and st.button("←"):
-                    st.session_state.current_page -= 1
+                if payload.get("has_previous", False) and st.button("←", key="prev_page"):
+                    st.session_state.current_page = max(1, st.session_state.current_page - 1)
                     st.rerun()
             with page_col2:
                 st.markdown(
-                    f"**Page {payload.get('page', 1)}/{payload.get('total_pages', 1)}**"
+                    f"**Page {current_page}/{total_pages}**"
                 )
             with page_col3:
-                if payload.get("has_next", False) and st.button("→"):
-                    st.session_state.current_page += 1
+                if payload.get("has_next", False) and st.button("→", key="next_page"):
+                    st.session_state.current_page = min(total_pages, st.session_state.current_page + 1)
                     st.rerun()
-                
         st.markdown("### Agent Parameters")
         for document in document_list:
             st.divider()
@@ -61,10 +68,10 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
             parameter = {}
             enabled = document.get('enabled', True)
             enable = st.checkbox(
-                "Enable Parameter", 
-                value=enabled, 
+                "Enable Parameter",
+                value=enabled,
                 key = f"enable_{document.get('id')}",
-                on_change= call_update_parameters, args = (agent_id, document.get('id'), {"enabled": not enabled}), 
+                on_change= call_update_parameters, args = (agent_id, document.get('id'), {"enabled": not enabled}),
                 label_visibility="visible"
             )
 
@@ -87,15 +94,16 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
     )
 
     data_to_import = ""
+    uploaded_file = None
+    text_import = None
     if knode_source == "Text input":
-        data_to_import = st.text_area(
+        text_import = st.text_area(
             "Agent Parameters in YAML or JSON",
             value="",
             height=170,
             key=f"{model_key}_parameter_data",
         )
 
-    uploaded_file = None
     if knode_source == "Upload file":
         uploaded_file = st.file_uploader(
             "Upload file (YAML or JSON)",
@@ -113,6 +121,16 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
                     data_to_import = yaml.safe_load(file_content)
             except Exception as e:
                 st.error(f"Error loading file: {e}")
+        if text_import:
+            try:
+                # Try JSON first
+                data_to_import = json.loads(text_import)
+            except json.JSONDecodeError:
+                try:
+                    # Fallback to YAML
+                    data_to_import = yaml.safe_load(text_import)
+                except yaml.YAMLError as e:
+                    raise ValueError("Input is not valid JSON or YAML.") from e
 
         if data_to_import:
             result = call_api(
