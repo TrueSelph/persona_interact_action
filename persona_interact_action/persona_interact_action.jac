@@ -3,6 +3,7 @@ import yaml;
 import os;
 import logging;
 import traceback;
+import from typing { Union }
 import from logging { Logger }
 
 import from jivas.agent.modules.system.common { date_now }
@@ -18,6 +19,7 @@ import from jivas.agent.modules.data.node_pager { NodePager }
 import from actions.jivas.persona_interact_action.parameters { Parameters }
 import from actions.jivas.persona_interact_action.parameter_entry { ParameterEntry }
 import from actions.jivas.persona_interact_action.parameter { Parameter }
+import from actions.jivas.persona_interact_action.send_message {send_message}
 import from jivas.agent.memory.frame { Frame }
 
 
@@ -38,16 +40,86 @@ node PersonaInteractAction(InteractAction) {
     has parameter_filename:str = "parameters.yaml";
     has parameters:list = [];
     has k:int = 5; # checks for any hanging interview process every k messages
+    has interaction_count:int = 0;
 
     #agent details
     has agent_name:str = "Agent";
     has agent_role:str = "An AI Assistant";
-    has agent_description:str = "friendly and helpful";
+    has agent_description:str = "You are friendly and helpful";
+    has agent_capabilities:list = ["None"];
     has prompt:str = "";
+    has canned_response_prompt:str = """
+        You are responding on behalf of an AI agent, {agent_name} which is a {agent_role}. The description of the agent is:
+        {agent_description}.
+        They are capable of callying the following special tasks:
+        {agent_capabilities}
+        You are a classification assistant that analyzes user messages and determines the appropriate response type. Analyze the user message and output a JSON object with the following structure:
+
+        {{
+        "category": "greeting" | "simple_request" | "complex_request" | "miscellaneous",
+        "canned": boolean,
+        "message": string | null,
+        }}
+
+        **Categories:**
+        - "greeting": Opening messages like hello, hi, hey, good morning/afternoon
+        - "simple request": Basic inquiries that can be answered simply (e.g., "what is your name", "who made you")
+        - "complex request": Requests requiring data retrieval, processing, or scheduling (e.g., company data, calendar operations, multi-step tasks)
+        - "miscellaneous": Anything that doesn't fit other categories as well as simple requests that cannot be answered by the information given in this prompt
+
+        **Canned Message Rules:**
+        - Use canned messages (canned: true) for greetings and simple requests
+        - If data is not available for you to answer then set canned to false
+        - Generate your own unique messages based on the agent role and desription
+        - If the user request in in the list of agent capabilities but you are not capable of carrying out the request then set it as a complec request
+        - Always use canned messages for complex requests that ask users to wait as you carry out their specific request
+        - For miscellaneous messages, typically don't use canned responses (canned: false)
+        - Complex requests must receive a request to wait
+
+        **Output Instructions:**
+        1. First determine the category
+        2. Decide if a canned response is appropriate
+        3. Generate the appropriate message if canned is true
+
+        **Example Outputs:**
+        User: "Hi there"
+        {{
+        "category": "greeting",
+        "canned": true,
+        "message": -generated message greeting the user-,
+        }}
+
+        User: "Show me Q3 sales data"
+        {{
+        "category": "complex_request", 
+        "canned": true,
+        "message": -your generated message asking the user to wait while you get the relevant data-,
+        }}
+
+        User: I want to book an appointment
+        {{
+        "category": "complex_request", 
+        "canned": true,
+        "message": -your generated message asking the user to wait while you carry out the request-,
+        }}
+
+        User: "What's your name?"
+        {{
+        "category": "simple_request",
+        "canned": true, 
+        "message": -introduce yourself and give a short description about yourself-,
+        }}
+
+        Now analyze this user message: {utterance}
+    """;
     has agent_prompt_template:str = """
-Your name is {agent_name}. Your role is {agent_role}. 
-You are {agent_description}. 
-Refer to the user as '{user}', if not None. Keep in mind '{date}' and '{time}' to be aware of the current date and time. 
+Your name is {agent_name}. Your role is {agent_role}. You are described as follows:
+{agent_description}.
+
+Your are capable of carrying out the following special abilities:
+{agent_capabilities}
+
+Refer to the user as '{user}', if not None. Keep in mind '{date}' and '{time}' to be aware of the current date and time.
 TASK DESCRIPTION:
 -----------------
 Continue the provided interaction in a natural and human-like manner.
@@ -60,10 +132,11 @@ Always abide by the following general principles (note these are not the "parame
 5. RESOLUTION-AWARE MESSAGE ENDING: Do not ask the user if there is “anything else” you can help with until their current request or problem is fully resolved. Treat a request as resolved only if a) the user explicitly confirms it; b) the original question has been answered in full; or c) all stated requirements are met. If resolution is unclear, continue engaging on the current topic instead of prompting for new topics.
 6. EASY-TO-READ FORMATTING:  MAKE RESPONSES EASY TO READ WAY BY UTILIZING PARAGRAPHS AND MARKDOWN WHEN NECESSARY
 
+{directives}
+
 {parameters}
 
-{directives} 
-        """;
+    """;
 
     has no_parameters_instruction:str = """
 ### PARAMETERS
@@ -206,6 +279,11 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         date = date_now(timezone=self.timezone, date_format='%A, %d %B, %Y');
         time = date_now(timezone=self.timezone, date_format='%I:%M %p');
+        canned_response = self.get_canned_response(visitor);
+
+        if type(canned_response) is dict{
+            return;
+        }
 
         # prepare the prompt with utterance
         prompt_messages = [];
@@ -223,8 +301,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
         # add human message
         prompt_messages.append({"human": visitor.utterance});
-
-
+        
         # process parameters
         parameters_list = self.get_parameter_entries();
         parameters = [];
@@ -242,7 +319,7 @@ These parameters have already been pre-filtered based on the interaction's conte
             visitor.interaction_node.add_directive(directive = action_response);
         }
 
-        if not action_response{
+        if not action_responses{
             # Check frame node data every k messages
             print("check messages");
             self.check_frame_node_data(visitor);
@@ -255,7 +332,13 @@ These parameters have already been pre-filtered based on the interaction's conte
         directives_list = visitor.interaction_node.get_directives();
 
         # formulate a complete prompt and add the system prompt last
-        final_prompt = self.create_agent_prompt(filtered_parameters_list, directives_list);
+        if canned_response{
+            canned_response_instruction = f"Note that the following message was just sent by you: '{canned_response}'. Your current response should flow naturally from it";
+            final_prompt = self.create_agent_prompt(filtered_parameters_list, directives_list, canned_response_instruction);
+        }
+        else{
+            final_prompt = self.create_agent_prompt(filtered_parameters_list, directives_list);
+        }
         prompt_messages.append({"system": final_prompt});
 
         model_action := self.get_agent().get_action(action_label=self.model_action);
@@ -280,15 +363,64 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         if not model_action_result {
             self.logger.error("Model action result is None.");
-            # return;
+            return;
         }
+        response_message = model_action_result.get_result() or "...";
+        self.set_final_message(visitor, response_message);
+        
+    }
 
+    def set_final_message(visitor:agent_graph_walker, response_message:str){
         # set the interaction message
-        interaction_message = model_action_result.get_result() or "...";
 
         visitor.interaction_node.set_message(
-            TextInteractionMessage(content=interaction_message)
+            TextInteractionMessage(content=response_message)
         );
+    }
+
+    def send_quick_message(visitor:agent_graph_walker, response_message:str){
+        print("trying to trigger async walker");
+
+        new_interact = (root spawn send_message(
+            visitor = visitor,
+            content = response_message,
+            agent_id = self.agent_id,
+            session_id = visitor.frame_node.session_id,
+            verbose = False,
+            tts = False,
+            reporting = False,
+            frame_node = visitor.frame_node,
+            interaction_node = visitor.interaction_node
+        ));
+    }
+
+    def get_canned_response(visitor:agent_graph_walker) -> Union[str,dict]{
+        
+        prompt_messages = [{"system":self.canned_response_prompt}];
+        prompt_variables = {
+            "utterance": visitor.utterance,
+            "agent_name":self.agent_name,
+            "agent_role":self.agent_role,
+            "agent_description":self.agent_description,
+            "agent_capabilities":str(self.agent_capabilities)
+        };
+        canned_response = self.model_call(prompt_messages,prompt_variables);
+        print("canned_response\n", canned_response);
+
+        if not canned_response.get("canned", False){
+            print("no canned");
+            return "";
+        }
+        elif "complex_request" in canned_response.get("category", ""){
+            print("complex request");
+            self.send_quick_message(visitor, canned_response.get("message", ""));
+            return canned_response.get("message", "");
+        }
+        else{
+            print("greeting or simple request");
+            self.set_final_message(visitor, canned_response.get("message", ""));
+            return canned_response;
+        }
     }
 
     def model_call(prompt_messages:list, prompt_variables:dict) -> any {
@@ -309,12 +441,12 @@ These parameters have already been pre-filtered based on the interaction's conte
 
             if not model_action_result {
                 self.logger.error("Model action result is None.");
-                return None;
+                return;
             }
-
-            message = model_action_result.get_result() or "...";
-            if not message{
-                message = model_action_result.get_json_result() or {};
+            try{
+                message = model_action_result.get_json_result();
+            } except Exception as e{
+                message = model_action_result.get_result() or "...";               
             }
             return message;
         } except Exception as e {
@@ -426,19 +558,21 @@ These parameters have already been pre-filtered based on the interaction's conte
         return parameters_prompt;
     }
 
-    def create_agent_prompt(parameters_list:list, directives_list:list) -> str {
+    def create_agent_prompt(parameters_list:list, directives_list:list, canned_response_instruction:str="") -> str {
         # create the final prompt to send to the model
         parameters_prompt = self.get_parameters_prompt(parameters_list);
         directives_prompt = self.prepare_persona_task_directives(directives_list);
 
         final_prompt = self.agent_prompt_template.replace("{parameters}", parameters_prompt);
         final_prompt = final_prompt.replace("{directives}", directives_prompt);
+        final_prompt = final_prompt.replace("{agent_capabilities}", str(self.agent_capabilities));
         final_prompt = final_prompt.replace("{agent_name}", self.agent_name);
         final_prompt = final_prompt.replace("{agent_description}", self.agent_description);
         final_prompt = final_prompt.replace("{agent_role}", self.agent_role);
+        final_prompt += canned_response_instruction;
 
         if self.prompt{
-            final_prompt = final_prompt + "### ADDITIONAL DETAILS\n" + self.prompt;
+            final_prompt = final_prompt +  "\n### ADDITIONAL DETAILS\n" +self.prompt;
         }
         print("final prompt\n", final_prompt);
         return final_prompt;
@@ -462,7 +596,6 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         If the user's last message is "What's the weather like?", and a parameter condition is "the user asks about the weather", then this parameter is applicable.
         However, if the user's last message is "What's the weather like?", and a parameter condition is "the user greets the agent", then this parameter is not applicable
-        return only a list of applicable parameters Ids. Do not give any explanations or reasoning for picking the parameter.
         
         Also note the agents role which is {agent_role} and the agent description is as follows:
         {agent_description}
@@ -484,6 +617,7 @@ These parameters have already been pre-filtered based on the interaction's conte
             applicable_parameters_ids = self.model_call(prompt_messages, prompt_variables);
 
             if applicable_parameters_ids{
+                print("apli params\n",applicable_parameters_ids);
                 for parameter in parameters_list{
                     if parameter.id in applicable_parameters_ids {
                         applicable_parameters.append(parameter);
@@ -633,9 +767,14 @@ These parameters have already been pre-filtered based on the interaction's conte
     def check_frame_node_data(visitor: agent_graph_walker) -> None {
         # Check frame node data every 5 messages
 
-        interactions = visitor.frame_node.get_interactions();
-        message_count = len(interactions);
+        interaction_count = visitor.frame_node.data_get(key="interaction_count");
+        if interaction_count{
+            message_count = int(interaction_count);
+        }else{
+            message_count = self.interaction_count;
+        }
         print("message count", message_count);
+
         if message_count % self.k == 0{
             # Check if there is data in the frame node
             action_nodes = self.get_agent().get_actions().get_all();
@@ -645,6 +784,7 @@ These parameters have already been pre-filtered based on the interaction's conte
                 frame_data = visitor.frame_node.data_get(key=f"{action.label}_results");
                 
                 if frame_data{
+                    self.logger.info(f"Frame node has data after {message_count} messages:");
                     for (key, value) in frame_data.items(){
                         self.logger.info(f"  {key}: {value}");
                     }
@@ -654,6 +794,9 @@ These parameters have already been pre-filtered based on the interaction's conte
                 }
             }
         }
+        
+        message_count += 1;
+        visitor.frame_node.data_set(key="interaction_count", value = str(message_count));
     }
 }
 
