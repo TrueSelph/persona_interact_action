@@ -1,12 +1,22 @@
+"""This module renders the app for the persona action."""
+
 import json
 import yaml
 import streamlit as st
-from typing import Any, Dict, List
+from typing import Any, Dict
 from jvclient.lib.widgets import app_controls, app_header, app_update_action
 from jvclient.lib.utils import call_api, get_reports_payload
 from streamlit_router import StreamlitRouter
 
 def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -> None:
+    """
+    Renders the app for the Persona Interact action.
+
+    :param router: The StreamlitRouter instance.
+    :param agent_id: The agent ID.
+    :param action_id: The action ID.
+    :param info: A dictionary containing additional information.
+    """
     (model_key, module_root) = app_header(agent_id, action_id, info)
     
     with st.expander("Persona Configuration"):
@@ -67,7 +77,7 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
             st.markdown(f"**ID:** {document.get('id', 'N/A')}")
             parameter = {}
             enabled = document.get('enabled', True)
-            enable = st.checkbox(
+            st.checkbox(
                 "Enable Parameter",
                 value=enabled,
                 key = f"enable_{document.get('id')}",
@@ -87,6 +97,14 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
                     st.error("Failed to update parameter.")
 
 def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -> None:
+    """
+    Display UI to import agent parameters from text input or uploaded file.
+
+    Supports JSON and YAML input. If the user provides valid data, the function
+    calls the persona action import_parameters walker to import the list of
+    parameter documents.
+    
+    """
     knode_source = st.radio(
         "Choose data source:",
         ("Text input", "Upload file"),
@@ -148,6 +166,17 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
             st.error("No data to import. Please provide valid text or upload a file.")
 
 def _render_purge_collection(model_key: str, agent_id: str, module_root: str) -> None:
+    """
+    Render UI to purge (delete) all parameters for the given agent.
+
+    The function shows a confirmation flow to prevent accidental deletion.
+    When confirmed, it calls the persona action delete_collection walker.
+
+    Args:
+        model_key (str): Unique key prefix for Streamlit session widgets.
+        agent_id (str): Agent ID whose collection will be purged.
+        module_root (str): Module root path (unused in current UI but provided for context).
+    """
     purge_key = f"{model_key}_purge_confirmation"
     if purge_key not in st.session_state:
         st.session_state[purge_key] = False
@@ -191,6 +220,17 @@ def _render_purge_collection(model_key: str, agent_id: str, module_root: str) ->
                 st.rerun()
 
 def call_update_parameters(agent_id: str, parameter_id: str, parameter: Dict[str, Any]) -> bool:
+    """
+    Update an agent parameter in the backend.
+
+    Args:
+        agent_id (str): The agent's ID.
+        parameter_id (str): The parameter's ID.
+        parameter (Dict[str, Any]): The parameter data to update.
+
+    Returns:
+        bool: True if the update was successful, False otherwise.
+    """
     result = call_api(
         endpoint="action/walker/persona_interact_action/update_parameters",
         json_data={
@@ -198,7 +238,7 @@ def call_update_parameters(agent_id: str, parameter_id: str, parameter: Dict[str
             "id": parameter_id,
             "data": parameter,
             "reporting": True,
-        },
+        }
     )
     if result and result.status_code == 200:
         return True
