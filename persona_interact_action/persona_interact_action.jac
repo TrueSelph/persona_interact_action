@@ -37,10 +37,33 @@ node PersonaInteractAction(InteractAction) {
     has model_name:str = "gpt-4o";
     has model_temperature:float = 0.3;
     has model_max_tokens:int = 4096;
+
     has parameter_filename:str = "parameters.yaml";
     has parameters:list = [];
-    has k:int = 5; # checks for any hanging interview process every k messages
-    has interaction_count:int = 0;
+    has k:int = 3; # checks for any hanging interview process every k messages
+    has interaction_count:int = 0; # number of interactions that have passed
+    has base_parameters:list = [
+        {
+        "condition": "User asks about OpenAI or your origin.",
+        "response": "Deny any association with OpenAI even when asked directly."
+        },
+        {
+        "condition": "User asks for your identity.",
+        "response": "Refer to yourself only by your name. Never say you are an AI language model."
+        },
+        {
+        "condition": "User request is outside your role or ability.",
+        "response": "Admit that the request is outside your role or ability; avoid giving inaccurate answers."
+        },
+        {
+        "condition": "You are likely to resend a message for a second time.",
+        "response": "State that you didn't quite catch that or you didn't understand and ask the user to rephrase or clarify their response."
+        },
+        {
+        "condition": "you are likely to send a message you have already repeated several times",
+        "response": "Apologize and tell the user that you are experiencing some technical difficulties then direct them to a human agent on tel number +592-225-3553"
+        }
+    ];
 
     #agent details
     has agent_name:str = "Agent";
@@ -51,7 +74,7 @@ node PersonaInteractAction(InteractAction) {
     has canned_response_prompt:str = """
         You are responding on behalf of an AI agent, {agent_name} which is a {agent_role}. The description of the agent is:
         {agent_description}.
-        They are capable of callying the following special tasks:
+        You are capable of the following special tasks:
         {agent_capabilities}
         You are a classification assistant that analyzes user messages and determines the appropriate response type. Analyze the user message and output a JSON object with the following structure:
 
@@ -75,6 +98,7 @@ node PersonaInteractAction(InteractAction) {
         - Always use canned messages for complex requests that ask users to wait as you carry out their specific request
         - For miscellaneous messages, typically don't use canned responses (canned: false)
         - Complex requests must receive a request to wait
+        - Never ask the user for additional details
 
         **Output Instructions:**
         1. First determine the category
@@ -114,23 +138,22 @@ node PersonaInteractAction(InteractAction) {
     """;
     has agent_prompt_template:str = """
 Your name is {agent_name}. Your role is {agent_role}. You are described as follows:
-{agent_description}.
+{agent_description}
 
-Your are capable of carrying out the following special abilities:
-{agent_capabilities}
+Your are capable of carrying out the following special abilities:{agent_capabilities}
 
 Refer to the user as '{user}', if not None. Keep in mind '{date}' and '{time}' to be aware of the current date and time.
 TASK DESCRIPTION:
 -----------------
 Continue the provided interaction in a natural and human-like manner.
-Your task is to produce a response to the latest state of the interaction.
+Your task is to produce a response to the latest state of the interaction while obeying the given directives and parameters.
 Always abide by the following general principles (note these are not the "parameters". The parameters will be provided later):
 1. GENERAL BEHAVIOR: Make your response as human-like as possible. Be concise and avoid being overly polite when not necessary.
 2. AVOID REPEATING YOURSELF: When replying— avoid repeating yourself. Instead, refer the user to your previous answer, or choose a new approach altogether. If a conversation is looping, point that out to the user instead of maintaining the loop.
 3. REITERATE INFORMATION FROM PREVIOUS MESSAGES IF NECESSARY: If you previously suggested a solution or shared information during the interaction, you may repeat it when relevant. Your earlier response may have been based on information that is no longer available to you, so it's important to trust that it was informed by the context at the time.
 4. MAINTAIN GENERATION SECRECY: Never reveal details about the process you followed to produce your response. Do not explicitly mention the tools, context variables, parameters, glossary, or any other internal information. Present your replies as though all relevant knowledge is inherent to you, not derived from external instructions.
 5. RESOLUTION-AWARE MESSAGE ENDING: Do not ask the user if there is “anything else” you can help with until their current request or problem is fully resolved. Treat a request as resolved only if a) the user explicitly confirms it; b) the original question has been answered in full; or c) all stated requirements are met. If resolution is unclear, continue engaging on the current topic instead of prompting for new topics.
-6. EASY-TO-READ FORMATTING:  MAKE RESPONSES EASY TO READ WAY BY UTILIZING PARAGRAPHS AND MARKDOWN WHEN NECESSARY
+6. EASY-TO-READ FORMATTING: Make responses easy to read by utilizing paragraphs, bolding and bullet points when necessary
 
 {directives}
 
@@ -245,7 +268,9 @@ These parameters have already been pre-filtered based on the interaction's conte
 
     def on_register() {
         # import parameters 
-        self.import_parameters(self.parameters);
+        parameters = self.base_parameters;
+        parameters.extend(self.parameters);
+        self.import_parameters(parameters);
     }
 
     def post_register() {
@@ -268,7 +293,6 @@ These parameters have already been pre-filtered based on the interaction's conte
 
     #  Executes the main persona interaction action.
     #  Handles prompt construction, parameter filtering, action execution, and model invocation.
-
     def execute(visitor:agent_graph_walker) -> None {
 
         # format response by channel
@@ -279,6 +303,7 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         date = date_now(timezone=self.timezone, date_format='%A, %d %B, %Y');
         time = date_now(timezone=self.timezone, date_format='%I:%M %p');
+
         canned_response = self.get_canned_response(visitor);
 
         if type(canned_response) is dict{
@@ -301,6 +326,11 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
         # add human message
         prompt_messages.append({"human": visitor.utterance});
+
+        # add canned message
+        if canned_response{
+            prompt_messages.append({"ai":canned_response});
+        }
         
         # process parameters
         parameters_list = self.get_parameter_entries();
@@ -308,7 +338,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         if parameters_list{
             for param in parameters_list{
                 if param.enabled{
-                    parameters.append(param);
+                parameters.append(param);
                 }
             }
         }
@@ -321,7 +351,6 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         if not action_responses{
             # Check frame node data every k messages
-            print("check messages");
             self.check_frame_node_data(visitor);
         }
 
@@ -331,14 +360,8 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
         directives_list = visitor.interaction_node.get_directives();
 
-        # formulate a complete prompt and add the system prompt last
-        if canned_response{
-            canned_response_instruction = f"Note that the following message was just sent by you: '{canned_response}'. Your current response should flow naturally from it";
-            final_prompt = self.create_agent_prompt(filtered_parameters_list, directives_list, canned_response_instruction);
-        }
-        else{
-            final_prompt = self.create_agent_prompt(filtered_parameters_list, directives_list);
-        }
+        final_prompt = self.create_agent_prompt(filtered_parameters_list, directives_list);
+        
         prompt_messages.append({"system": final_prompt});
 
         model_action := self.get_agent().get_action(action_label=self.model_action);
@@ -367,7 +390,6 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
         response_message = model_action_result.get_result() or "...";
         self.set_final_message(visitor, response_message);
-        
     }
 
     def set_final_message(visitor:agent_graph_walker, response_message:str){
@@ -379,9 +401,7 @@ These parameters have already been pre-filtered based on the interaction's conte
     }
 
     def send_quick_message(visitor:agent_graph_walker, response_message:str){
-        print("trying to trigger async walker");
-
-        new_interact = (root spawn send_message(
+        root spawn send_message(
             visitor = visitor,
             content = response_message,
             agent_id = self.agent_id,
@@ -391,7 +411,7 @@ These parameters have already been pre-filtered based on the interaction's conte
             reporting = False,
             frame_node = visitor.frame_node,
             interaction_node = visitor.interaction_node
-        ));
+        );
     }
 
     def get_canned_response(visitor:agent_graph_walker) -> Union[str,dict]{
@@ -405,19 +425,15 @@ These parameters have already been pre-filtered based on the interaction's conte
             "agent_capabilities":str(self.agent_capabilities)
         };
         canned_response = self.model_call(prompt_messages,prompt_variables);
-        print("canned_response\n", canned_response);
 
         if not canned_response.get("canned", False){
-            print("no canned");
             return "";
         }
         elif "complex_request" in canned_response.get("category", ""){
-            print("complex request");
             self.send_quick_message(visitor, canned_response.get("message", ""));
             return canned_response.get("message", "");
         }
         else{
-            print("greeting or simple request");
             self.set_final_message(visitor, canned_response.get("message", ""));
             return canned_response;
         }
@@ -456,7 +472,7 @@ These parameters have already been pre-filtered based on the interaction's conte
     }
 
     def get_parameter_entries() -> list {
-        # Retrieves all the parameters from the collection.
+        # Retrieves all enabled the parameters from the collection.
 
         collection = self.get_collection();
         parameter_node = Parameters(collection_id=collection.id);
@@ -504,8 +520,6 @@ These parameters have already been pre-filtered based on the interaction's conte
         visitor.frame_node.data_set(key="visitor_utterance", value=visitor.utterance);
 
         for parameter in parameters_list{
-            print("eligible params", parameter);
-
             if parameter.action and ('Interact' not in parameter.action){
                 action_node = self.get_agent().get_action(action_label=parameter.action);
                 action_response = action_node.run(frame_node=visitor.frame_node);
@@ -513,9 +527,7 @@ These parameters have already been pre-filtered based on the interaction's conte
                     action_responses.append(action_response);
                 }
                 elif type(action_response) is list{
-                    for response in action_response{
-                        action_responses.append(response);
-                    }
+                    action_responses.extend(action_response);
                 }
             }
             elif parameter.action and ('Interact' in parameter.action){
@@ -558,23 +570,21 @@ These parameters have already been pre-filtered based on the interaction's conte
         return parameters_prompt;
     }
 
-    def create_agent_prompt(parameters_list:list, directives_list:list, canned_response_instruction:str="") -> str {
+    def create_agent_prompt(parameters_list:list, directives_list:list) -> str {
         # create the final prompt to send to the model
         parameters_prompt = self.get_parameters_prompt(parameters_list);
         directives_prompt = self.prepare_persona_task_directives(directives_list);
 
         final_prompt = self.agent_prompt_template.replace("{parameters}", parameters_prompt);
         final_prompt = final_prompt.replace("{directives}", directives_prompt);
-        final_prompt = final_prompt.replace("{agent_capabilities}", str(self.agent_capabilities));
+        final_prompt = final_prompt.replace("{agent_capabilities}", "\n-".join(self.agent_capabilities));
         final_prompt = final_prompt.replace("{agent_name}", self.agent_name);
         final_prompt = final_prompt.replace("{agent_description}", self.agent_description);
         final_prompt = final_prompt.replace("{agent_role}", self.agent_role);
-        final_prompt += canned_response_instruction;
 
         if self.prompt{
             final_prompt = final_prompt +  "\n### ADDITIONAL DETAILS\n" +self.prompt;
         }
-        print("final prompt\n", final_prompt);
         return final_prompt;
     }
 
@@ -594,14 +604,20 @@ These parameters have already been pre-filtered based on the interaction's conte
         Return a list of parameters where the condition matches the context of the last message.
         Example:
 
-        If the user's last message is "What's the weather like?", and a parameter condition is "the user asks about the weather", then this parameter is applicable.
-        However, if the user's last message is "What's the weather like?", and a parameter condition is "the user greets the agent", then this parameter is not applicable
+        If the user's last message is "What is the weather like?", and a parameter condition is "the user asks about the weather", then this parameter is applicable.
+        However, if the user's last message is "What is the weather like?", and a parameter condition is "the user greets the agent", then this parameter is not applicable
         
         Also note the agents role which is {agent_role} and the agent description is as follows:
         {agent_description}
 
-        GUIDELINES:
+        Note that the agent is capable of doing the folowing:
+        {agent_capabilities}
+
+        PARAMETERS:
         {parameters}
+        
+        Return a JSON object with a single key called ids that lists all the ids of applicable parameters. 
+
         """;
 
         if parameters_list{
@@ -610,16 +626,16 @@ These parameters have already been pre-filtered based on the interaction's conte
             prompt_variables ={
                 "parameters":parameters_list,
                 "agent_role":self.agent_role,
-                "agent_description":self.agent_description
+                "agent_description":self.agent_description,
+                "agent_capabilities":str(self.agent_capabilities)
             };
 
             applicable_parameters = [];
             applicable_parameters_ids = self.model_call(prompt_messages, prompt_variables);
 
             if applicable_parameters_ids{
-                print("apli params\n",applicable_parameters_ids);
                 for parameter in parameters_list{
-                    if parameter.id in applicable_parameters_ids {
+                    if parameter.id in applicable_parameters_ids["ids"] {
                         applicable_parameters.append(parameter);
                     }
                 }
@@ -641,7 +657,7 @@ These parameters have already been pre-filtered based on the interaction's conte
     def healthcheck() -> bool {
         try {
             if(
-                self.prompt and
+                self.agent_prompt_template and
                 (model_action := self.get_agent().get_actions().get(action_label=self.model_action))
             ){
                 return True;
@@ -652,10 +668,9 @@ These parameters have already been pre-filtered based on the interaction's conte
             return False;
         }
     }
-
-    #  Loads parameters from a provided list and imports them into the graph.
-    #  Ensures file closure and validates YAML structure.
-    def import_parameters(parameters:list=[]) -> None {
+    
+    def import_parameters(parameters:list=[]) {
+        #  Loads parameters from a provided list and imports them into the graph.
         try {
             if not parameters{
                 # gets parameters from file in persona directory
@@ -667,7 +682,6 @@ These parameters have already been pre-filtered based on the interaction's conte
                     yaml_content = yaml.safe_load(yaml_file);
                     if not isinstance(yaml_content, list) {
                         self.logger.error("YAML content is not a list of parameters.");
-                        return None;
                     }
                     parameters = yaml_content;
                 } finally {
@@ -681,14 +695,12 @@ These parameters have already been pre-filtered based on the interaction's conte
             collection = self.get_collection();
             if not collection {
                 self.logger.error("Collection not found in import_parameters.");
-                return None;
             }
             parameter_node = Parameters(collection_id=collection.id);
-            import_collection = collection spawn _import_collection(document=parameters);
+            import_collection = collection spawn _import_parameter(document=parameters);
 
         } except Exception as e {
             self.logger.error(f"Document loading failed: {traceback.format_exc()}");
-            return None;
         }
     }
 
@@ -721,7 +733,7 @@ These parameters have already been pre-filtered based on the interaction's conte
     }
 
     def get_parameters_node() -> Optional[Parameters] {
-        # Retrieves a job entry by job_id from the collection.
+        # Retrieves Parameters node from the collection.
         collection = self.get_collection();
 
         parameters_node = node_obj(node_get({
@@ -773,7 +785,6 @@ These parameters have already been pre-filtered based on the interaction's conte
         }else{
             message_count = self.interaction_count;
         }
-        print("message count", message_count);
 
         if message_count % self.k == 0{
             # Check if there is data in the frame node
@@ -800,7 +811,7 @@ These parameters have already been pre-filtered based on the interaction's conte
     }
 }
 
-walker _import_collection {
+walker _import_parameter {
     has document:list = [];
 
     obj __specs__ {
@@ -851,7 +862,6 @@ walker _import_collection {
                 # now we attach it to the parameters node
                 here ++> parameter;
             }
-
         }
     }
 }

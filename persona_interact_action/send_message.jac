@@ -6,7 +6,6 @@ import from jivas.agent.core.agent { Agent }
 import from jivas.agent.action.action { Action }
 import from jivas.agent.action.actions { Actions }
 import from jivas.agent.action.agent_graph_walker { agent_graph_walker }
-# import from jivas.agent.modules.action.path { action_walker_path }
 import from jivas.agent.memory.frame { Frame }
 import from jivas.agent.action.interact { interact }
 import from jivas.agent.memory.interaction { Interaction }
@@ -31,17 +30,10 @@ async walker send_message(agent_graph_walker) {
     has response: dict = {};
     has message: InteractionMessage = None;
 
-    # set up logger
-    # static has logger:Logger = logging.getLogger(__name__);
-
-    # class __specs__ {
-    #     static has private: bool = False;
-    #     static has path: str = action_walker_path(__module__);
-    #     static has excluded: list[str] = ["response"];  # exclude response from the specs
-    # }
+    set up logger
+    static has logger:Logger = logging.getLogger(__name__);
 
     can on_exit with exit{
-        print("exiting");
         self.channel = self.interaction_node.channel;
         self.interaction_node = self.frame_node.create_interaction(utterance = self.content, channel = self.channel);
 
@@ -51,96 +43,10 @@ async walker send_message(agent_graph_walker) {
             TextInteractionMessage(content=self.content)
         );
 
-        print("self message", self.interaction_node.get_message());
         text_message = TextInteractionMessage(content=self.content);
         agent_node = &self.agent_id;
         if(whatsapp_action_node := agent_node.get_actions().get(action_label=self.whatsapp_action)) and self.channel=="whatsapp" {
             whatsapp_action_node.send_message(session_id=self.session_id, message=text_message);
-        }
-        # self.respond();
-    }
-
-    def respond() {
-        # prepares and returns the response from the interaction node
-        print("responding");
-        agent_node = &self.agent_id;
-
-        if (agent_node and self.interaction_node) {
-
-            interaction_data = {};
-            # close the interaction
-            self.interaction_node.close();
-            # add the interaction to the frame
-            self.frame_node.insert_interaction(self.interaction_node);
-
-            # lets return the generated response, if we have one...
-            print(f"has response{self.interaction_node.has_response()}");
-            has_response = self.interaction_node.has_response();
-
-            if (has_response) {
-                print("has response");
-                try  {
-                    # set the message obj
-                    self.message = self.interaction_node.get_message();
-                    print("has message", self.message);
-                    # prepare the response payload
-                    interaction_data = self.interaction_node.export();
-                    print("interaction data", interaction_data);
-
-                    # handle verbose mode
-                    if (self.verbose) {
-                        interaction_data['frame'] = self.frame_node.export();
-                        self.response = interaction_data;
-                    } else {
-                        self.response = {"response": self.interaction_node.get_response().export()};
-                    }
-                    # if (agent_node.is_logging()) {
-                    #     # log interaction
-                    #     self.log_interaction(data=interaction_data);
-                    # }
-
-                } except Exception as e {
-                    self.logger.error(
-                        f"an exception occurred, {traceback.format_exc()}"
-                    );
-                }
-            }
-
-            if (not has_response or not self.response) {
-                self.message = SilentInteractionMessage();
-                self.response = InteractionResponse(
-                    session_id=self.frame_node.session_id,
-                    message=self.message
-                ).export();
-            }
-
-            # activate pruning protocol to shed old interactions beyond frame_size limit from this interaction frame
-            self.frame_node.prune_interactions(
-                frame_size=agent_node.frame_size
-            );
-
-        } else {
-            self.message = SilentInteractionMessage();
-            self.response = InteractionResponse(message=self.message).export();
-        }
-
-        # handle text-to-speech if enabled
-        if (self.tts) {
-            if (tts_action := agent_node.get_tts_action()) {
-                # grab phoneme content if available
-                content = self.message.data_get('phoneme_content')
-                    or self.message.get_content();
-                # perform TTS
-                audio = tts_action.invoke(text=content, as_url=True);
-                if (audio) {
-                    self.response["response"].update({"audio_url": audio});
-                }
-            }
-        }
-        print("message", self.message, "\n\n response", self.response);
-
-        if (self.reporting) {
-            report self.response;
         }
     }
 }

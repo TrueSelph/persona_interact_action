@@ -19,3 +19,6 @@
 - Updgraded to work with parameters
 - Can use parameters to call other actions
 - Updated prompt template
+
+## 0.2.1
+- Updgraded to be able to send out canned messages
