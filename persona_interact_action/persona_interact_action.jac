@@ -34,7 +34,7 @@ node PersonaInteractAction(InteractAction) {
     has history_size:int = 3;
     has max_statement_length:int = 500;
     has model_action:str = "LangChainModelAction";
-    has model_name:str = "gpt-4o";
+    has model_name:str = "gpt-4.1";
     has model_temperature:float = 0.3;
     has model_max_tokens:int = 4096;
 
@@ -140,7 +140,8 @@ node PersonaInteractAction(InteractAction) {
 Your name is {agent_name}. Your role is {agent_role}. You are described as follows:
 {agent_description}
 
-Your are capable of carrying out the following special abilities:{agent_capabilities}
+Your are capable of carrying out the following special abilities:
+-{agent_capabilities}
 
 Refer to the user as '{user}', if not None. Keep in mind '{date}' and '{time}' to be aware of the current date and time.
 TASK DESCRIPTION:
@@ -498,6 +499,9 @@ These parameters have already been pre-filtered based on the interaction's conte
         index = 1;
 
         for directive in directives {
+            if not directive{
+                continue;
+            }
             directives_str = directives_str + (str(index) + ". " + directive + "\n");
             index = index + 1;
         }
