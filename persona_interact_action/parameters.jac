@@ -10,7 +10,7 @@ node Parameters(GraphNode) {
 
     def create_parameter_entry(parameter_data:dict) -> ParameterEntry {
 
-        
+
         parameter = Parameter(
             collection_id = self.collection_id,
             condition = parameter_data.get("condition", ""),
@@ -51,7 +51,7 @@ node Parameters(GraphNode) {
         # retrieves an attached parameter entry by id
         return node_obj([-->](`?ParameterEntry)(?condition == condition));
     }
-    
+
     def delete_parameter_entry(id:str) -> bool {
         # removes an attached document entry by id
         parameter_entry = node_obj([-->](`?ParameterEntry)(?id == id));

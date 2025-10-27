@@ -32,7 +32,7 @@ walker list_parameters(agent_graph_walker) {
     can on_actions with Actions entry {
         visit [-->](`?Action)(?enabled==True)(?label=='PersonaInteractAction');
     }
-    
+
 
     can on_action with Action entry {
         # get the list of documents from the manifest

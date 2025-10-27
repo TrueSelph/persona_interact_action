@@ -18,23 +18,23 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
     :param info: A dictionary containing additional information.
     """
     (model_key, module_root) = app_header(agent_id, action_id, info)
-    
+
     with st.expander("Persona Configuration"):
         app_controls(agent_id, action_id)
         app_update_action(agent_id, action_id)
-        
+
     with st.expander("Import parameters", False):
         _render_import_parameters(model_key, agent_id, module_root)
-        
+
     with st.expander("Purge Collection", False):
         _render_purge_collection(model_key, agent_id, module_root)
-    
+
     list_key = f"{model_key}_parameters_list"
     if list_key not in st.session_state:
         st.session_state[list_key] = {}
-        
+
     col1, col2, col3 = st.columns([2, 4, 2])
-    
+
     # Pagination state
     if "current_page" not in st.session_state:
         st.session_state.current_page = 1
@@ -88,7 +88,7 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
             parameter['condition'] = st.text_input("Condition", value=document.get('condition', 'N/A'), key=f"condition_{document.get('id')}")
             parameter['response'] = st.text_input("Response", value=document.get('response', 'N/A'), key=f"response_{document.get('id')}")
             parameter['action'] = st.text_input("Action", value=document.get('action', 'N/A'), key=f"action_{document.get('id')}")
-            
+
             if st.button("Save Changes", key=f"save_{document.get('id')}"):
                 # Implement the logic to save changes to the backend
                 if call_update_parameters(agent_id, document.get('id'), parameter):
@@ -103,7 +103,7 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
     Supports JSON and YAML input. If the user provides valid data, the function
     calls the persona action import_parameters walker to import the list of
     parameter documents.
-    
+
     """
     knode_source = st.radio(
         "Choose data source:",

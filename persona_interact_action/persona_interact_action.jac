@@ -115,14 +115,14 @@ node PersonaInteractAction(InteractAction) {
 
         User: "Show me Q3 sales data"
         {{
-        "category": "complex_request", 
+        "category": "complex_request",
         "canned": true,
         "message": -your generated message asking the user to wait while you get the relevant data-,
         }}
 
         User: I want to book an appointment
         {{
-        "category": "complex_request", 
+        "category": "complex_request",
         "canned": true,
         "message": -your generated message asking the user to wait while you carry out the request-,
         }}
@@ -130,7 +130,7 @@ node PersonaInteractAction(InteractAction) {
         User: "What's your name?"
         {{
         "category": "simple_request",
-        "canned": true, 
+        "canned": true,
         "message": -introduce yourself and give a short description about yourself-,
         }}
 
@@ -147,6 +147,7 @@ Refer to the user as '{user}', if not None. Keep in mind '{date}' and '{time}' t
 TASK DESCRIPTION:
 -----------------
 Continue the provided interaction in a natural and human-like manner.
+Note that if the last message in the interaction was by the AI, this response should be a natural follow up to that message so it seems like you sent both of them.
 Your task is to produce a response to the latest state of the interaction while obeying the given directives and parameters.
 Always abide by the following general principles (note these are not the "parameters". The parameters will be provided later):
 1. GENERAL BEHAVIOR: Make your response as human-like as possible. Be concise and avoid being overly polite when not necessary.
@@ -174,13 +175,13 @@ Instead adhere to any directives given
 Directives are instructions that you should follow when responding to the user
 Avoid mentioning or asking for things not specified by the directive
 Be as concise as possible when carrying out the directive
-You must follow the directive unless the directive conflicts with a parameter. 
+You must follow the directive unless the directive conflicts with a parameter.
 Parameters take priority over directives so if there is a conflict, obey the parameter.
 """;
     has no_directives_instruction:str = """
 ### DIRECTIVES
-There are no specific directives for this interaction. 
-Please generate your response using your best judgment, following general conversational principles and the agent’s behavioral parameters. 
+There are no specific directives for this interaction.
+Please generate your response using your best judgment, following general conversational principles and the agent’s behavioral parameters.
 Focus on being clear, concise, and helpful in addressing the user’s request.
     """;
     has parameter_directive:str = "### PARAMETERS \nWhen crafting your reply, you must follow the behavioral parameters provided below, which have been identified as relevant to the current state of the interaction.";
@@ -191,7 +192,7 @@ You may choose not to follow a parameter only in the following cases:
     - It lacks sufficient context or data to apply reliably.
     - It conflicts with an insight.
     - It depends on an agent intention condition that does not apply in the current situation (as mentioned above)
-    - If a parameter offers multiple options (e.g., "do X or Y") and another more specific parameter restricts one of those options 
+    - If a parameter offers multiple options (e.g., "do X or Y") and another more specific parameter restricts one of those options
         (e.g., "don’t do X"), follow both by choosing the permitted alternative (i.e., do Y).
 In all other situations, you are expected to adhere to the parameters.
 These parameters have already been pre-filtered based on the interaction's context and other considerations outside your scope.
@@ -268,7 +269,7 @@ These parameters have already been pre-filtered based on the interaction's conte
     };
 
     def on_register() {
-        # import parameters 
+        # import parameters
         parameters = self.base_parameters;
         parameters.extend(self.parameters);
         self.import_parameters(parameters);
@@ -332,7 +333,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         if canned_response{
             prompt_messages.append({"ai":canned_response});
         }
-        
+
         # process parameters
         parameters_list = self.get_parameter_entries();
         parameters = [];
@@ -362,7 +363,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         directives_list = visitor.interaction_node.get_directives();
 
         final_prompt = self.create_agent_prompt(filtered_parameters_list, directives_list);
-        
+
         prompt_messages.append({"system": final_prompt});
 
         model_action := self.get_agent().get_action(action_label=self.model_action);
@@ -416,7 +417,7 @@ These parameters have already been pre-filtered based on the interaction's conte
     }
 
     def get_canned_response(visitor:agent_graph_walker) -> Union[str,dict]{
-        
+
         prompt_messages = [{"system":self.canned_response_prompt}];
         prompt_variables = {
             "utterance": visitor.utterance,
@@ -463,7 +464,7 @@ These parameters have already been pre-filtered based on the interaction's conte
             try{
                 message = model_action_result.get_json_result();
             } except Exception as e{
-                message = model_action_result.get_result() or "...";               
+                message = model_action_result.get_result() or "...";
             }
             return message;
         } except Exception as e {
@@ -556,7 +557,7 @@ These parameters have already been pre-filtered based on the interaction's conte
                     parameter_prompt_list.append(f"When {parameter.condition}, then {parameter.response}");
                 }
             }
-        
+
             if(parameter_prompt_list) {
                 for parameter in parameter_prompt_list {
                     parameters_str = parameters_str + (str(index) + ". " + parameter + "\n");
@@ -610,7 +611,7 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         If the user's last message is "What is the weather like?", and a parameter condition is "the user asks about the weather", then this parameter is applicable.
         However, if the user's last message is "What is the weather like?", and a parameter condition is "the user greets the agent", then this parameter is not applicable
-        
+
         Also note the agents role which is {agent_role} and the agent description is as follows:
         {agent_description}
 
@@ -619,8 +620,8 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         PARAMETERS:
         {parameters}
-        
-        Return a JSON object with a single key called ids that lists all the ids of applicable parameters. 
+
+        Return a JSON object with a single key called ids that lists all the ids of applicable parameters.
 
         """;
 
@@ -672,7 +673,7 @@ These parameters have already been pre-filtered based on the interaction's conte
             return False;
         }
     }
-    
+
     def import_parameters(parameters:list=[]) {
         #  Loads parameters from a provided list and imports them into the graph.
         try {
@@ -716,7 +717,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         # Get a page of results
         items = pager.get_page({
             "$and": [{"name": "Parameter"}, {"archetype.collection_id": collection.id}],
-            
+
         });
 
         if not items {
@@ -795,9 +796,9 @@ These parameters have already been pre-filtered based on the interaction's conte
             action_nodes = self.get_agent().get_actions().get_all();
 
             for action in action_nodes{
-            
+
                 frame_data = visitor.frame_node.data_get(key=f"{action.label}_results");
-                
+
                 if frame_data{
                     self.logger.info(f"Frame node has data after {message_count} messages:");
                     for (key, value) in frame_data.items(){
@@ -809,7 +810,7 @@ These parameters have already been pre-filtered based on the interaction's conte
                 }
             }
         }
-        
+
         message_count += 1;
         visitor.frame_node.data_set(key="interaction_count", value = str(message_count));
     }
