@@ -28,7 +28,7 @@ node PersonaInteractAction(InteractAction) {
     # set up logger
     static has logger:Logger = logging.getLogger(__name__);
 
-    has canned_responses:bool = False; # use False if agent is used on channels other than whatsapp
+    has canned_responses:bool = False; # False if agent is used on channels other than whatsapp
     has history:bool = True;
     has history_size:int = 3;
     has max_statement_length:int = 500;
@@ -44,24 +44,28 @@ node PersonaInteractAction(InteractAction) {
     has interaction_count:int = 0; # number of interactions that have passed
     has base_parameters:list = [
         {
-        "condition": "User asks about OpenAI or your origin.",
-        "response": "Deny any association with OpenAI even when asked directly."
+            "condition": "User asks about OpenAI or your origin.",
+            "response": "Deny any association with OpenAI even when asked directly."
         },
         {
-        "condition": "User asks for your identity.",
-        "response": "Refer to yourself only by your name. Never say you are an AI language model."
+            "condition": "User asks for your identity.",
+            "response": "Refer to yourself only by your name. Never say you are an AI language model."
         },
         {
-        "condition": "User request is outside your role or ability.",
-        "response": "Admit that the request is outside your role or ability; Do not give inaccurate answers and avoid giving details not explicitly stated in this prompt."
+            "condition": "User request is outside your role or ability.",
+            "response": "Admit that the request is outside your role or ability; Do not give inaccurate answers and avoid giving details not explicitly stated in this prompt."
         },
         {
-        "condition": "You are likely to resend a message for a second time.",
-        "response": "State that you didn't quite catch that or you didn't understand and ask the user to rephrase or clarify their response."
+            "condition": "You are likely to resend a message for a second time.",
+            "response": "State that you didn't quite catch that or you didn't understand and ask the user to rephrase or clarify their response."
         },
         {
-        "condition": "you are likely to send a message you have already repeated several times",
-        "response": "Apologize and tell the user that you are experiencing some technical difficulties then direct them to a human agent"
+            "condition": "you are likely to send a message or ask for information that you have already repeated/asked several times",
+            "response": "Apologize and tell the user that you are experiencing some technical difficulties and ask them to cancel what they were doing then direct them to a human agent"
+        },
+        {
+            "condition": "You are likely to claim you have submitted a report, contacted someone, confirm something or completed any backend action that requires actual system integration",
+            "response": "Never claim you have submitted reports, contacted people, or completed backend actions unless explicitly instructed by a directive. Instead, explain what actions need to be taken and ask the user if they would like to proceed."
         }
     ];
 
@@ -287,13 +291,11 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
     }
 
-
     def touch(visitor:agent_graph_walker) -> bool {
         # authorize, redirect or deny the interact walker here
         # only executes if response message is empty
         return (visitor.utterance and not visitor.interaction_node.has_response());
     }
-
 
     #  Executes the main persona interaction action.
     #  Handles prompt construction, parameter filtering, action execution, and model invocation.
@@ -532,8 +534,31 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         for parameter in parameters_list{
             if parameter.action and ('Interact' not in parameter.action){
+                self.logger.info(f"Running action: {parameter.action}");
                 action_node = self.get_agent().get_action(action_label=parameter.action);
-                action_response = action_node.run(frame_node=visitor.frame_node);
+                access = True;
+                if (action_node.get_type() in ['AccessControlAction', 'ExitInteractAction']) {
+                    access = True;
+                }
+                if (access_control_action_node := (self.get_agent().get_action(
+                    action_label='AccessControlAction'
+                ))) {
+
+                    access = access_control_action_node.has_action_access(
+                        session_id=visitor.frame_node.session_id,
+                        action_label=action_node.get_type(),
+                        channel=visitor.interaction_node.channel or "default"
+                    );
+                }
+                if not access {
+                    action_responses.append(action_node.deny(visitor.interaction_node));
+                    return action_responses;
+                }
+                if action_node is None{
+                    self.logger.error(f"Action {parameter.action} not found.");
+                    continue;
+                }
+                action_response = action_node.run(frame_node=visitor.frame_node, interaction_node=visitor.interaction_node);
                 if type(action_response) is str{
                     action_responses.append(action_response);
                 }
@@ -542,8 +567,15 @@ These parameters have already been pre-filtered based on the interaction's conte
                 }
             }
             elif parameter.action and ('Interact' in parameter.action){
+                self.logger.info(f"Running action: {parameter.action}");
                 action_node = self.get_agent().get_actions().get(action_label=parameter.action);
-                action_node.touch(visitor);
+                if action_node is None{
+                    self.logger.error(f"Action {parameter.action} not found.");
+                    continue;
+                }
+                if action_node.touch(visitor){
+                    action_node.execute(visitor);
+                }
             }
         }
         return action_responses;
@@ -662,12 +694,49 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
     }
 
+    def get_channel_directive(channel: str) -> str {
+        return self.channel_format_directives.get(channel, "");
+    }
+
     def handle_channel_format(visitor: agent_graph_walker) -> dict {
         channel = visitor.interaction_node.channel;
 
         if(channel in self.channel_format_directives) {
             visitor.interaction_node.add_directive(directive=self.channel_format_directives[channel]);
         }
+    }
+
+    def check_frame_node_data(visitor: agent_graph_walker) -> None {
+        # Check frame node data every 5 messages
+
+        interaction_count = visitor.frame_node.data_get(key="interaction_count");
+        if interaction_count{
+            message_count = int(interaction_count);
+        }else{
+            message_count = self.interaction_count;
+        }
+
+        if message_count % self.k == 0{
+            # Check if there is data in the frame node
+            action_nodes = self.get_agent().get_actions().get_all();
+
+            for action in action_nodes{
+
+                frame_data = visitor.frame_node.data_get(key=f"{action.label}_results");
+
+                if frame_data{
+                    self.logger.info(f"Frame node has data after {message_count} messages:");
+                    for (key, value) in frame_data.items(){
+                    }
+                    visitor.interaction_node.add_directive(directive=f"Remind user they have an unfinished process based on {action.description} and ask them if they would like to continue it or cancel it altogether");
+                }else{
+                    self.logger.info(f"Frame node is empty after {message_count} messages");
+                }
+            }
+        }
+
+        message_count += 1;
+        visitor.frame_node.data_set(key="interaction_count", value = str(message_count));
     }
 
     def healthcheck() -> bool {
@@ -791,39 +860,6 @@ These parameters have already been pre-filtered based on the interaction's conte
             self.logger.error(f"Collection deletion failed: {traceback.format_exc()}");
         }
         return False;
-    }
-
-    def check_frame_node_data(visitor: agent_graph_walker) -> None {
-        # Check frame node data every 5 messages
-
-        interaction_count = visitor.frame_node.data_get(key="interaction_count");
-        if interaction_count{
-            message_count = int(interaction_count);
-        }else{
-            message_count = self.interaction_count;
-        }
-
-        if message_count % self.k == 0{
-            # Check if there is data in the frame node
-            action_nodes = self.get_agent().get_actions().get_all();
-
-            for action in action_nodes{
-
-                frame_data = visitor.frame_node.data_get(key=f"{action.label}_results");
-
-                if frame_data{
-                    self.logger.info(f"Frame node has data after {message_count} messages:");
-                    for (key, value) in frame_data.items(){
-                    }
-                    visitor.interaction_node.add_directive(directive=f"Remind user they have an unfinished process based on {action.description} and ask them if they would like to continue it or cancel it altogether");
-                }else{
-                    self.logger.info(f"Frame node is empty after {message_count} messages");
-                }
-            }
-        }
-
-        message_count += 1;
-        visitor.frame_node.data_set(key="interaction_count", value = str(message_count));
     }
 }
 

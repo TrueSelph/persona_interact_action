@@ -91,7 +91,7 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
                     label_visibility="visible"
                 )
 
-                parameter['condition'] = st.text_input("Condition", value=document.get('condition', 'N/A'), key=f"condition_{document.get('id')}")
+                parameter['condition'] = st.text_area("Condition", value=document.get('condition', 'N/A'), key=f"condition_{document.get('id')}")
                 parameter['response'] = st.text_input("Response", value=document.get('response', 'N/A'), key=f"response_{document.get('id')}")
                 parameter['action'] = st.text_input("Action", value=document.get('action', 'N/A'), key=f"action_{document.get('id')}")
 
