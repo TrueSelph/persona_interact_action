@@ -222,7 +222,8 @@ These parameters have already been pre-filtered based on the interaction's conte
             "- Numbered lists: Begin with 1. 2. 3.\n"
             "- Quotes: Prefix lines with > symbol\n"
             "- URLs: Reformat all URLs to use raw URLs and not hyperlinks.\n"
-            "- Separate sections with line breaks"
+            "- Separate sections with line breaks\n"
+            "Use plain text generally but include bolding and italics when needed to highlight important words and phrases"
         ),
 
         "instagram": (
@@ -305,7 +306,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         self.handle_channel_format(visitor=visitor);
 
         # grab user's name, if set
-        user = visitor.frame_node.get_user_name();
+        user = visitor.frame_node.get_user_name(self.use_full_name);
 
         date = date_now(timezone=self.timezone, date_format='%A, %d %B, %Y');
         time = date_now(timezone=self.timezone, date_format='%I:%M %p');
@@ -641,19 +642,23 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         TASK DESCRIPTION
         -----------------
-        You are tasked with evaluating a list of parameters against the context of a conversation. Your goal is to identify which parameters are applicable based on the user's last message.
+        You are tasked with evaluating a list of parameters against the context of a conversation or your internal agent roles and capabilities.
+        Your goal is to identify which parameters are applicable based on the user's last message or agent role or agent capabilities.
 
-        Parameters: Each parameter  is an python object that consists of a condition and a response. The condition specifies when the parameter should apply.
+        Parameters: Each parameter is an python object that consists of a condition and a response. The condition specifies when the parameter should apply.
         Conversation History: Review the last few messages to understand the context.
         Instructions:
 
-        Analyze the user's last message.
+        Analyze the user's last message as well as the agent's role and capabilities.
         Compare it with each parameter's condition.
         Return a list of parameters where the condition matches the context of the last message.
         Example:
 
         If the user's last message is "What is the weather like?", and a parameter condition is "the user asks about the weather", then this parameter is applicable.
         However, if the user's last message is "What is the weather like?", and a parameter condition is "the user greets the agent", then this parameter is not applicable
+
+        Some conditions are dependent on the agent themselves e.g
+        Example: If the agent's role is "telling the current time" and a parameter has the condition "the agent's role is to tell the current time" then this parameter is applicable
 
         Also note the agents role which is {agent_role} and the agent description is as follows:
         {agent_description}
