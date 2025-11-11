@@ -95,6 +95,8 @@ node PersonaInteractAction(InteractAction) {
             "- Avoid emojis unless requested"
         )
     };
+    has use_full_name:bool = True;
+
 
     def post_register() {
         # to ensure compatibility, this action is added to the exception list in intent_classifier
@@ -118,7 +120,7 @@ node PersonaInteractAction(InteractAction) {
         self.handle_channel_format(visitor=visitor);
 
         # grab user's name, if set
-        user = visitor.frame_node.get_user_name();
+        user = visitor.frame_node.get_user_name(self.use_full_name);
 
         date = date_now(timezone=self.timezone, date_format='%A, %d %B, %Y');
         time = date_now(timezone=self.timezone, date_format='%I:%M %p');
