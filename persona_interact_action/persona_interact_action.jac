@@ -29,6 +29,7 @@ node PersonaInteractAction(InteractAction) {
     static has logger:Logger = logging.getLogger(__name__);
 
     has canned_responses:bool = False; # False if agent is used on channels other than whatsapp
+    has use_full_name:bool = True;
     has history:bool = True;
     has history_size:int = 3;
     has max_statement_length:int = 500;
