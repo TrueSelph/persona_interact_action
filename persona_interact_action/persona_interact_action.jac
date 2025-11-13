@@ -65,7 +65,7 @@ node PersonaInteractAction(InteractAction) {
             "response": "Apologize and tell the user that you are experiencing some technical difficulties and ask them to cancel what they were doing then direct them to a human agent"
         },
         {
-            "condition": "You are about to claim you have submitted a report, contacted someone, or completed any backend action that requires actual system integration",
+            "condition": "You are likely to claim you have submitted a report, contacted someone, confirm something or completed any backend action that requires actual system integration",
             "response": "Never claim you have submitted reports, contacted people, or completed backend actions unless explicitly instructed by a directive. Instead, explain what actions need to be taken and ask the user if they would like to proceed."
         }
     ];
@@ -275,7 +275,6 @@ These parameters have already been pre-filtered based on the interaction's conte
             "- Avoid emojis unless requested"
         )
     };
-    has use_full_name:bool = True;
 
 
     def on_register() {
@@ -364,7 +363,6 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
         filtered_parameters_list = self.filter_parameters(prompt_messages, parameters, visitor);
         action_responses = self.run_actions(filtered_parameters_list, visitor);
-
 
         if visitor.interaction_node.has_response(){
             return;
@@ -552,6 +550,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         for parameter in parameters_list{
 
             if parameter.get("action") and ('Interact' not in parameter.get("action")){
+                self.logger.info(f"Running action: {parameter.get("action")}");
                 action_node = self.get_agent().get_action(action_label=parameter.get("action"));
                 if action_node {
 
@@ -589,6 +588,7 @@ These parameters have already been pre-filtered based on the interaction's conte
                 }
             }
             elif parameter.get("action") and ('Interact' in parameter.get("action")){
+                self.logger.info(f"Running action: {parameter.get("action")}");
                 action_node = self.get_agent().get_actions().get(action_label=parameter.get("action"));
                 if action_node is None{
                     self.logger.error(f"Action {parameter.get("action")} not found.");
@@ -666,19 +666,19 @@ These parameters have already been pre-filtered based on the interaction's conte
         Your goal is to identify which parameters are applicable based on the user's last message or agent role or agent capabilities.
 
         Parameters: Each parameter is an python object that consists of a condition and a response. The condition specifies when the parameter should apply.
-        Conversation History: Review the last few messages to understand the context.
-        Instructions:
+        Conversation History: Review the message history to understand the context if available.
 
+        Instructions:
         Analyze the user's last message as well as the agent's role and capabilities.
         Compare it with each parameter's condition.
-        Return a list of parameters where the condition matches the context of the last message.
+        Return a list of parameters where the condition matches the context of the last message or the agent's role, description, or capabilities.
         Example:
 
         If the user's last message is "What is the weather like?", and a parameter condition is "the user asks about the weather", then this parameter is applicable.
         However, if the user's last message is "What is the weather like?", and a parameter condition is "the user greets the agent", then this parameter is not applicable
 
         Some conditions are dependent on the agent themselves e.g
-        Example: If the agent's role is "telling the current time" and a parameter has the condition "the agent's role is to tell the current time" then this parameter is applicable
+        Example: If the agent's role is "telling the current time" and a parameter has the condition "the agent's role is to tell the current time" then this parameter is applicable every time the user messages the agent
 
         Also note the agents role which is {agent_role} and the agent description is as follows:
         {agent_description}
