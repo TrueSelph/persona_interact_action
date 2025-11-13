@@ -275,6 +275,8 @@ These parameters have already been pre-filtered based on the interaction's conte
             "- Avoid emojis unless requested"
         )
     };
+    has use_full_name:bool = True;
+
 
     def on_register() {
         # import parameters
