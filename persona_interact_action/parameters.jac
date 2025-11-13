@@ -10,7 +10,6 @@ node Parameters(GraphNode) {
 
     def create_parameter_entry(parameter_data:dict) -> ParameterEntry {
 
-
         parameter = Parameter(
             collection_id = self.collection_id,
             condition = parameter_data.get("condition", ""),
