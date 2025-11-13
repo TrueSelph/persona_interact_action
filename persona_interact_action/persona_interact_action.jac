@@ -363,6 +363,11 @@ These parameters have already been pre-filtered based on the interaction's conte
         filtered_parameters_list = self.filter_parameters(prompt_messages, parameters, visitor);
         action_responses = self.run_actions(filtered_parameters_list, visitor);
 
+
+        if visitor.interaction_node.has_response(){
+            return;
+        }
+
         for action_response in action_responses{
             visitor.interaction_node.add_directive(directive = action_response);
         }
@@ -543,7 +548,6 @@ These parameters have already been pre-filtered based on the interaction's conte
         visitor.frame_node.data_set(key="visitor_utterance", value=visitor.utterance);
 
         for parameter in parameters_list{
-            print("eligible params", parameter);
 
             if parameter.get("action") and ('Interact' not in parameter.get("action")){
                 self.logger.info(f"Running action: {parameter.get("action")}");
