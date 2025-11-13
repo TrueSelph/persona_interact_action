@@ -15,5 +15,10 @@
 ## 0.1.0
 - Updated to Jivas 2.1.0 spec.
 
-## 0.1.1
-- Added a boolean option to retrieve the user's full name, enhancing personalization.
+## 0.2.0
+- Updgraded to work with parameters
+- Can use parameters to call other actions
+- Updated prompt template
+
+## 0.2.1
+- Upgraded to be able to send out canned messages
