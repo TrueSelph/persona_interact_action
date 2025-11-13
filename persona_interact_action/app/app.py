@@ -1,11 +1,12 @@
 """This module renders the app for the persona action."""
 
 import json
-import yaml
-import streamlit as st
 from typing import Any, Dict
-from jvclient.lib.widgets import app_controls, app_header, app_update_action
+
+import streamlit as st
+import yaml
 from jvclient.lib.utils import call_api, get_reports_payload
+from jvclient.lib.widgets import app_controls, app_header, app_update_action
 from streamlit_router import StreamlitRouter
 
 
@@ -19,7 +20,9 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
     :param info: A dictionary containing additional information.
     """
     (model_key, module_root) = app_header(agent_id, action_id, info)
-    tab1, tab2, tab3 = st.tabs(["Persona Configuration", "Parameters", "Channel Formats"])
+    tab1, tab2, tab3 = st.tabs(
+        ["Persona Configuration", "Parameters", "Channel Formats"]
+    )
 
     with tab1:
         st.header("Persona Configuration")
@@ -66,38 +69,57 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
             with col3:
                 page_col1, page_col2, page_col3 = st.columns([1, 2, 1])
                 with page_col1:
-                    if payload.get("has_previous", False) and st.button("←", key="prev_page"):
-                        st.session_state.current_page = max(1, st.session_state.current_page - 1)
+                    if payload.get("has_previous", False) and st.button(
+                        "←", key="prev_page"
+                    ):
+                        st.session_state.current_page = max(
+                            1, st.session_state.current_page - 1
+                        )
                         st.rerun()
                 with page_col2:
-                    st.markdown(
-                        f"**Page {current_page}/{total_pages}**"
-                    )
+                    st.markdown(f"**Page {current_page}/{total_pages}**")
                 with page_col3:
-                    if payload.get("has_next", False) and st.button("→", key="next_page"):
-                        st.session_state.current_page = min(total_pages, st.session_state.current_page + 1)
+                    if payload.get("has_next", False) and st.button(
+                        "→", key="next_page"
+                    ):
+                        st.session_state.current_page = min(
+                            total_pages, st.session_state.current_page + 1
+                        )
                         st.rerun()
             st.markdown("### Agent Parameters")
             for document in document_list:
                 st.divider()
                 st.markdown(f"**ID:** {document.get('id', 'N/A')}")
                 parameter = {}
-                enabled = document.get('enabled', True)
+                enabled = document.get("enabled", True)
                 st.checkbox(
                     "Enable Parameter",
                     value=enabled,
-                    key = f"enable_{document.get('id')}",
-                    on_change= update_parameters, args = (agent_id, document.get('id'), {"enabled": not enabled}),
-                    label_visibility="visible"
+                    key=f"enable_{document.get('id')}",
+                    on_change=update_parameters,
+                    args=(agent_id, document.get("id"), {"enabled": not enabled}),
+                    label_visibility="visible",
                 )
 
-                parameter['condition'] = st.text_area("Condition", value=document.get('condition', 'N/A'), key=f"condition_{document.get('id')}")
-                parameter['response'] = st.text_input("Response", value=document.get('response', 'N/A'), key=f"response_{document.get('id')}")
-                parameter['action'] = st.text_input("Action", value=document.get('action', 'N/A'), key=f"action_{document.get('id')}")
+                parameter["condition"] = st.text_area(
+                    "Condition",
+                    value=document.get("condition", "N/A"),
+                    key=f"condition_{document.get('id')}",
+                )
+                parameter["response"] = st.text_input(
+                    "Response",
+                    value=document.get("response", "N/A"),
+                    key=f"response_{document.get('id')}",
+                )
+                parameter["action"] = st.text_input(
+                    "Action",
+                    value=document.get("action", "N/A"),
+                    key=f"action_{document.get('id')}",
+                )
 
                 if st.button("Save Changes", key=f"save_{document.get('id')}"):
                     # Implement the logic to save changes to the backend
-                    if update_parameters(agent_id, document.get('id'), parameter):
+                    if update_parameters(agent_id, document.get("id"), parameter):
                         st.success("Changes saved successfully.")
                     else:
                         st.error("Failed to update parameter.")
@@ -106,7 +128,9 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
         st.header("Channel Formats")
 
         # Access channel_format_directives from session state
-        channel_directives = st.session_state[model_key].get("channel_format_directives", {})
+        channel_directives = st.session_state[model_key].get(
+            "channel_format_directives", {}
+        )
 
         if not channel_directives:
             st.write("No channel formats available.")
@@ -114,13 +138,15 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
             # Display each channel and its formatting directive
             for channel, directive in channel_directives.items():
                 with st.expander(f"**{snake_to_title(channel)}**", expanded=False):
-                    st.session_state[model_key]["channel_format_directives"][channel] = st.text_area(
+                    st.session_state[model_key]["channel_format_directives"][
+                        channel
+                    ] = st.text_area(
                         channel,
                         value=directive,
                         height=180,
                         label_visibility="collapsed",
                     )
-                    if st.button("Update", key = f"{model_key}_{channel}"):
+                    if st.button("Update", key=f"{model_key}_{channel}"):
                         # Debug: Show what we're sending
                         result = call_update_action(
                             action_id=action_id,
@@ -131,6 +157,7 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
                             st.success("Changes saved")
                         else:
                             st.error("Unable to save changes")
+
 
 def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -> None:
     """
@@ -201,6 +228,7 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         else:
             st.error("No data to import. Please provide valid text or upload a file.")
 
+
 def _render_purge_collection(model_key: str, agent_id: str, module_root: str) -> None:
     """
     Render UI to purge (delete) all parameters for the given agent.
@@ -255,7 +283,10 @@ def _render_purge_collection(model_key: str, agent_id: str, module_root: str) ->
                 st.session_state[purge_key] = False
                 st.rerun()
 
-def update_parameters(agent_id: str, parameter_id: str, parameter: Dict[str, Any]) -> bool:
+
+def update_parameters(
+    agent_id: str, parameter_id: str, parameter: Dict[str, Any]
+) -> bool:
     """
     Update an agent parameter in the backend.
 
@@ -280,13 +311,13 @@ def update_parameters(agent_id: str, parameter_id: str, parameter: Dict[str, Any
         return True
     return False
 
+
 def snake_to_title(snake_str: str) -> str:
     """Convert a snake_case string to Title Case."""
     return snake_str.replace("_", " ").title()
 
-def call_update_action(
-    action_id: str, action_data: dict, agent_id:str
-) -> dict:
+
+def call_update_action(action_id: str, action_data: dict, agent_id: str) -> dict:
     """Call the API to update a specific state for a given ."""
     endpoint = "walker/update_action"
     json_data = {

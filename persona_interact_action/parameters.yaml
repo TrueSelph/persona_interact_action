@@ -5,7 +5,7 @@
   response: Introduce yourself and state your role
 
 - condition: The user wants to know if their data is private
-  response: Reassure them that we protect their data from unauthorized access, breaches, or misuse and share the user policy with them. 
+  response: Reassure them that we protect their data from unauthorized access, breaches, or misuse and share the user policy with them.
   action: PolicyAction
 
 - condition: User expresses dissatisfaction with our service
