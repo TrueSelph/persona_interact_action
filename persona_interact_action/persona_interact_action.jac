@@ -348,12 +348,19 @@ These parameters have already been pre-filtered based on the interaction's conte
         parameters = [];
         if parameters_list{
             for param in parameters_list{
-                if param.enabled{
-                parameters.append(param);
+                if param.enabled {
+                    parameters.append(
+                        {
+                            "id": param.id,
+                            "condition": param.condition,
+                            "action": param.action,
+                            "response": param.response
+                        }
+                    );
                 }
             }
         }
-        filtered_parameters_list = self.filter_parameters(prompt_messages, parameters);
+        filtered_parameters_list = self.filter_parameters(prompt_messages, parameters, visitor);
         action_responses = self.run_actions(filtered_parameters_list, visitor);
 
         for action_response in action_responses{
@@ -436,7 +443,7 @@ These parameters have already been pre-filtered based on the interaction's conte
             "agent_description":self.agent_description,
             "agent_capabilities":str(self.agent_capabilities)
         };
-        canned_response = self.model_call(prompt_messages,prompt_variables);
+        canned_response = self.model_call(prompt_messages, prompt_variables, visitor);
 
         if not canned_response.get("canned", False){
             return "";
@@ -451,7 +458,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         }
     }
 
-    def model_call(prompt_messages:list, prompt_variables:dict) -> any {
+    def model_call(prompt_messages:list, prompt_variables:dict, visitor:agent_graph_walker) -> any {
         try {
             model_action := self.get_agent().get_action(action_label=self.model_action);
             if not model_action {
@@ -464,7 +471,8 @@ These parameters have already been pre-filtered based on the interaction's conte
                 prompt_variables=prompt_variables,
                 model_name=self.model_name,
                 model_temperature=self.model_temperature,
-                model_max_tokens=self.model_max_tokens
+                model_max_tokens=self.model_max_tokens,
+                interaction_node=visitor.interaction_node
             );
 
             if not model_action_result {
@@ -535,44 +543,51 @@ These parameters have already been pre-filtered based on the interaction's conte
         visitor.frame_node.data_set(key="visitor_utterance", value=visitor.utterance);
 
         for parameter in parameters_list{
-            if parameter.action and ('Interact' not in parameter.action){
-                self.logger.info(f"Running action: {parameter.action}");
-                action_node = self.get_agent().get_action(action_label=parameter.action);
-                access = True;
-                if (action_node.get_type() in ['AccessControlAction', 'ExitInteractAction']) {
-                    access = True;
-                }
-                if (access_control_action_node := (self.get_agent().get_action(
-                    action_label='AccessControlAction'
-                ))) {
+            print("eligible params", parameter);
 
-                    access = access_control_action_node.has_action_access(
-                        session_id=visitor.frame_node.session_id,
-                        action_label=action_node.get_type(),
-                        channel=visitor.interaction_node.channel or "default"
-                    );
-                }
-                if not access {
-                    action_responses.append(action_node.deny(visitor.interaction_node));
-                    return action_responses;
-                }
-                if action_node is None{
-                    self.logger.error(f"Action {parameter.action} not found.");
-                    continue;
-                }
-                action_response = action_node.run(frame_node=visitor.frame_node, interaction_node=visitor.interaction_node);
-                if type(action_response) is str{
-                    action_responses.append(action_response);
-                }
-                elif type(action_response) is list{
-                    action_responses.extend(action_response);
+            if parameter.get("action") and ('Interact' not in parameter.get("action")){
+                self.logger.info(f"Running action: {parameter.get("action")}");
+                action_node = self.get_agent().get_action(action_label=parameter.get("action"));
+                if action_node {
+
+                    access = True;
+                    if (action_node.get_type() in ['AccessControlAction', 'ExitInteractAction']) {
+                        access = True;
+                    }
+                    if (access_control_action_node := (self.get_agent().get_action(
+                        action_label='AccessControlAction'
+                    ))) {
+
+                        access = access_control_action_node.has_action_access(
+                            session_id=visitor.frame_node.session_id,
+                            action_label=action_node.get_type(),
+                            channel=visitor.interaction_node.channel or "default"
+                        );
+                    }
+                    if not access {
+                        action_responses.append(action_node.deny(visitor.interaction_node));
+                        return action_responses;
+                    }
+                    if action_node is None{
+                        self.logger.error(f"Action {parameter.get("action")} not found.");
+                        continue;
+                    }
+                    action_response = action_node.run(frame_node=visitor.frame_node, interaction_node=visitor.interaction_node);
+                    if type(action_response) is str{
+                        action_responses.append(action_response);
+                    }
+                    elif type(action_response) is list{
+                        action_responses.extend(action_response);
+                    }
+                } else {
+                    self.logger.warning(f"Persona Run Action '{parameter.get("action")}' not found.");
                 }
             }
-            elif parameter.action and ('Interact' in parameter.action){
-                self.logger.info(f"Running action: {parameter.action}");
-                action_node = self.get_agent().get_actions().get(action_label=parameter.action);
+            elif parameter.get("action") and ('Interact' in parameter.get("action")){
+                self.logger.info(f"Running action: {parameter.get("action")}");
+                action_node = self.get_agent().get_actions().get(action_label=parameter.get("action"));
                 if action_node is None{
-                    self.logger.error(f"Action {parameter.action} not found.");
+                    self.logger.error(f"Action {parameter.get("action")} not found.");
                     continue;
                 }
                 if action_node.touch(visitor){
@@ -593,8 +608,8 @@ These parameters have already been pre-filtered based on the interaction's conte
 
         if parameters_list{
             for parameter in parameters_list{
-                if(parameter.condition and parameter.response){
-                    parameter_prompt_list.append(f"When {parameter.condition}, then {parameter.response}");
+                if(parameter.get("condition") and parameter.get("response")){
+                    parameter_prompt_list.append(f"When {parameter.get("condition")}, then {parameter.get("response")}");
                 }
             }
 
@@ -638,7 +653,7 @@ These parameters have already been pre-filtered based on the interaction's conte
         return final_prompt;
     }
 
-    def filter_parameters(messages_for_llm:list, parameters_list:list) -> list {
+    def filter_parameters(messages_for_llm:list, parameters_list:list, visitor:agent_graph_walker) -> list {
         filter_parameter_prompt = """
 
         TASK DESCRIPTION
@@ -647,19 +662,19 @@ These parameters have already been pre-filtered based on the interaction's conte
         Your goal is to identify which parameters are applicable based on the user's last message or agent role or agent capabilities.
 
         Parameters: Each parameter is an python object that consists of a condition and a response. The condition specifies when the parameter should apply.
-        Conversation History: Review the last few messages to understand the context.
-        Instructions:
+        Conversation History: Review the message history to understand the context if available.
 
+        Instructions:
         Analyze the user's last message as well as the agent's role and capabilities.
         Compare it with each parameter's condition.
-        Return a list of parameters where the condition matches the context of the last message.
+        Return a list of parameters where the condition matches the context of the last message or the agent's role, description, or capabilities.
         Example:
 
         If the user's last message is "What is the weather like?", and a parameter condition is "the user asks about the weather", then this parameter is applicable.
         However, if the user's last message is "What is the weather like?", and a parameter condition is "the user greets the agent", then this parameter is not applicable
 
         Some conditions are dependent on the agent themselves e.g
-        Example: If the agent's role is "telling the current time" and a parameter has the condition "the agent's role is to tell the current time" then this parameter is applicable
+        Example: If the agent's role is "telling the current time" and a parameter has the condition "the agent's role is to tell the current time" then this parameter is applicable every time the user messages the agent
 
         Also note the agents role which is {agent_role} and the agent description is as follows:
         {agent_description}
@@ -685,11 +700,11 @@ These parameters have already been pre-filtered based on the interaction's conte
             };
 
             applicable_parameters = [];
-            applicable_parameters_ids = self.model_call(prompt_messages, prompt_variables);
+            applicable_parameters_ids = self.model_call(prompt_messages, prompt_variables, visitor);
 
             if applicable_parameters_ids{
                 for parameter in parameters_list{
-                    if parameter.id in applicable_parameters_ids["ids"] {
+                    if str(parameter.get("id")) in applicable_parameters_ids["ids"] {
                         applicable_parameters.append(parameter);
                     }
                 }
