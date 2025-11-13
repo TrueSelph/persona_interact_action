@@ -27,7 +27,7 @@ Now supports streaming responses when the `streaming` flag is set on interact ca
 
 ## Dependencies
 
-- **Jivas:** `^2.0.0-alpha.43`
+- **Jivas:** `^2.1.23`
 - **Actions:**
   - `jivas/langchain_model_action`: `~0.1.2`
 

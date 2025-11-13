@@ -21,4 +21,4 @@
 - Updated prompt template
 
 ## 0.2.1
-- Updgraded to be able to send out canned messages
+- Upgraded to be able to send out canned messages

@@ -12,7 +12,7 @@ walker list_parameters(agent_graph_walker) {
 
     has page:int = 1;
     has per_page:int = 10;
-    has all:bool = False;  # new flag to indicate whether to return all documents
+    has all:bool = True;  # new flag to indicate whether to return all documents
     has response:list[dict] = [];
     has reporting:bool = True;
 
@@ -33,12 +33,11 @@ walker list_parameters(agent_graph_walker) {
         visit [-->](`?Action)(?enabled==True)(?label=='PersonaInteractAction');
     }
 
-
     can on_action with Action entry {
         # get the list of documents from the manifest
 
         if self.all {
-            self.response = here.list_parameters(page=self.page, limit=0);  # fetch all documents
+            self.response = here.list_parameters(page=self.page, limit=100);  # fetch all documents
         } else {
             self.response = here.list_parameters(page=self.page, limit=self.per_page);  # fetch paged documents
         }
