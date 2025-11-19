@@ -1,5 +1,3 @@
-"""This module renders the app for the persona action."""
-
 import json
 from typing import Any, Dict
 
@@ -116,13 +114,18 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
                     value=document.get("action", "N/A"),
                     key=f"action_{document.get('id')}",
                 )
+                col1, col2 = st.columns(2)
+                with col1:
 
-                if st.button("Save Changes", key=f"save_{document.get('id')}"):
-                    # Implement the logic to save changes to the backend
-                    if update_parameters(agent_id, document.get("id"), parameter):
-                        st.success("Changes saved successfully.")
-                    else:
-                        st.error("Failed to update parameter.")
+                    if st.button("Save Changes", key=f"save_{document.get('id')}"):
+                        # Implement the logic to save changes to the backend
+                        if update_parameters(agent_id, document.get("id"), parameter):
+                            st.success("Changes saved successfully.")
+                        else:
+                            st.error("Failed to update parameter.")
+
+                with col2:
+                    _render_delete_parameter(model_key, agent_id, document.get("id"))
 
     with tab3:
         st.header("Channel Formats")
@@ -228,6 +231,48 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         else:
             st.error("No data to import. Please provide valid text or upload a file.")
 
+def _render_delete_parameter(model_key: str, agent_id: str, parameter_id: str) -> bool:
+    """
+    Delete a single parameter document for the given agent.
+
+    Returns True on success (HTTP 200), False otherwise.
+    """
+
+    delete_key = f"{model_key}_delete_confirmation"
+    if delete_key not in st.session_state:
+        st.session_state[delete_key] = False
+
+    if not st.session_state[delete_key]:
+        if st.button("Delete", key=f"{model_key}_{parameter_id}_btn_delete_parameter"):
+            st.session_state[delete_key] = True
+            st.rerun()
+    else:
+        st.warning(
+            "⚠️ Are you ABSOLUTELY sure you want to delete this parameter? This action cannot be undone!"
+        )
+
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if st.button(
+                "✅ Confirm Deletion",
+                type="primary",
+                key=f"{model_key}_{parameter_id}_btn_confirm_deletion",
+            ):
+                if call_api(
+                    endpoint="action/walker/persona_interact_action/delete_parameter",
+                    json_data={"agent_id": agent_id, "parameter_id": parameter_id},
+                ):
+                    st.success("Parameter deleted successfully.")
+                    st.session_state[delete_key] = False
+                    st.rerun()
+                else:
+                    st.error("Failed to delete parameter.")
+                    st.session_state[delete_key] = False
+                    st.rerun()
+        with col2:
+            if st.button("❌ Cancel", key=f"{model_key}_{parameter_id}_btn_cancel_deletion"):
+                st.session_state[delete_key] = False
+                st.rerun()
 
 def _render_purge_collection(model_key: str, agent_id: str, module_root: str) -> None:
     """

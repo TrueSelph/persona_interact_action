@@ -17,6 +17,7 @@ async walker send_message(agent_graph_walker) {
     has visitor:agent_graph_walker = None;
     has agent_id:str = "";
     has session_id:str = "";
+    has channel:str = "whatsapp";
     has content:str = "";
     has response:list[dict] = [];
     has verbose: bool = False; # verbose payload or not
@@ -32,7 +33,6 @@ async walker send_message(agent_graph_walker) {
 
 
     can on_exit with exit{
-        self.channel = self.interaction_node.channel;
         self.interaction_node = self.frame_node.create_interaction(utterance = self.content, channel = self.channel);
 
         # TODO add code to add the message to the current interaction_node
@@ -44,7 +44,7 @@ async walker send_message(agent_graph_walker) {
         text_message = TextInteractionMessage(content=self.content);
         agent_node = &self.agent_id;
         if(whatsapp_action_node := agent_node.get_actions().get(action_label=self.whatsapp_action)) and self.channel=="whatsapp" {
-            whatsapp_action_node.send_message(session_id=self.session_id, message=text_message);
+            whatsapp_action_node.send_message(session_id=self.frame_node.session_id, message=text_message);
         }
         # self.respond();
     }

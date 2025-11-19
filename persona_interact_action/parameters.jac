@@ -2,6 +2,7 @@ import yaml;
 import json;
 import from jivas.agent.core.graph_node { GraphNode }
 import from jivas.agent.modules.system.common { node_obj }
+import from jac_cloud.plugin.jaseci { JacPlugin as Jac }
 import from actions.jivas.persona_interact_action.parameter_entry { ParameterEntry }
 import from actions.jivas.persona_interact_action.parameter { Parameter }
 

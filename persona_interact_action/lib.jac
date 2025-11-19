@@ -5,5 +5,6 @@ import from actions.jivas.persona_interact_action {
     import_parameters,
     delete_collection,
     list_parameters,
-    update_parameters
+    update_parameters,
+    delete_parameter
 }
