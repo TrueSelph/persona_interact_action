@@ -116,13 +116,18 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
                     value=document.get("action", "N/A"),
                     key=f"action_{document.get('id')}",
                 )
+                col1, col2 = st.columns(2)
+                with col1:
 
-                if st.button("Save Changes", key=f"save_{document.get('id')}"):
-                    # Implement the logic to save changes to the backend
-                    if update_parameters(agent_id, document.get("id"), parameter):
-                        st.success("Changes saved successfully.")
-                    else:
-                        st.error("Failed to update parameter.")
+                    if st.button("Save Changes", key=f"save_{document.get('id')}"):
+                        # Implement the logic to save changes to the backend
+                        if update_parameters(agent_id, document.get("id"), parameter):
+                            st.success("Changes saved successfully.")
+                        else:
+                            st.error("Failed to update parameter.")
+
+                with col2:
+                    _render_delete_parameter(model_key, agent_id, document.get("id"))
 
     with tab3:
         st.header("Channel Formats")
@@ -174,7 +179,7 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         key=f"{model_key}_parameter_source",
     )
 
-    data_to_import = ""
+    data_to_import = []
     uploaded_file = None
     text_import = None
     if knode_source == "Text input":
@@ -196,8 +201,14 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         if uploaded_file:
             try:
                 file_content = uploaded_file.read().decode("utf-8")
+                # debug helper (remove or comment out later)
+                st.info("RAW UPLOADED CONTENT:", repr(file_content)[:500])
                 if uploaded_file.type == "application/json":
-                    data_to_import = json.loads(file_content)
+                    json_data = json.loads(file_content)
+                    if type(json_data) is not list:
+                        data_to_import = [json_data]
+                    else:
+                        data_to_import = json_data
                 else:
                     data_to_import = yaml.safe_load(file_content)
             except Exception as e:
@@ -205,13 +216,19 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         if text_import:
             try:
                 # Try JSON first
-                data_to_import = json.loads(text_import)
+                json_data = json.loads(text_import)
+                if type(json_data) is not list:
+                    data_to_import = [json_data]
+                else:
+                    data_to_import = json_data
             except json.JSONDecodeError:
                 try:
                     # Fallback to YAML
                     data_to_import = yaml.safe_load(text_import)
                 except yaml.YAMLError as e:
-                    raise ValueError("Input is not valid JSON or YAML.") from e
+                    st.error(f"Error loading text: {e}")
+            except Exception as e:
+                st.error(f"Error loading text: {e}")
 
         if data_to_import:
             result = call_api(
@@ -227,6 +244,54 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
                 st.error("Failed to import parameters. Ensure valid YAML/JSON format.")
         else:
             st.error("No data to import. Please provide valid text or upload a file.")
+    return
+
+
+def _render_delete_parameter(model_key: str, agent_id: str, parameter_id: str) -> None:
+    """
+    Delete a single parameter document for the given agent.
+
+    Returns True on success (HTTP 200), False otherwise.
+    """
+
+    delete_key = f"{model_key}_delete_confirmation"
+    if delete_key not in st.session_state:
+        st.session_state[delete_key] = False
+
+    if not st.session_state[delete_key]:
+        if st.button("Delete", key=f"{model_key}_{parameter_id}_btn_delete_parameter"):
+            st.session_state[delete_key] = True
+            st.rerun()
+    else:
+        st.warning(
+            "⚠️ Are you ABSOLUTELY sure you want to delete this parameter? This action cannot be undone!"
+        )
+
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if st.button(
+                "✅ Confirm Deletion",
+                type="primary",
+                key=f"{model_key}_{parameter_id}_btn_confirm_deletion",
+            ):
+                if call_api(
+                    endpoint="action/walker/persona_interact_action/delete_parameter",
+                    json_data={"agent_id": agent_id, "parameter_id": parameter_id},
+                ):
+                    st.success("Parameter deleted successfully.")
+                    st.session_state[delete_key] = False
+                    st.rerun()
+                else:
+                    st.error("Failed to delete parameter.")
+                    st.session_state[delete_key] = False
+                    st.rerun()
+        with col2:
+            if st.button(
+                "❌ Cancel", key=f"{model_key}_{parameter_id}_btn_cancel_deletion"
+            ):
+                st.session_state[delete_key] = False
+                st.rerun()
+    return
 
 
 def _render_purge_collection(model_key: str, agent_id: str, module_root: str) -> None:
@@ -282,6 +347,7 @@ def _render_purge_collection(model_key: str, agent_id: str, module_root: str) ->
             if st.button("❌ Cancel", key=f"{model_key}_btn_cancel_purge"):
                 st.session_state[purge_key] = False
                 st.rerun()
+    return
 
 
 def update_parameters(
