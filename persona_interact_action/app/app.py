@@ -1,3 +1,5 @@
+"""This module renders the app for the persona action."""
+
 import json
 from typing import Any, Dict
 
@@ -196,11 +198,18 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         )
 
     if st.button("Import", key=f"{model_key}_btn_import_parameters"):
+        # ...existing code...
         if uploaded_file:
             try:
                 file_content = uploaded_file.read().decode("utf-8")
+                # debug helper (remove or comment out later)
+                st.info("RAW UPLOADED CONTENT:", repr(file_content)[:500])
                 if uploaded_file.type == "application/json":
-                    data_to_import = json.loads(file_content)
+                    json_data = json.loads(file_content)
+                    if type(json_data) is not list:
+                        data_to_import = [json_data]
+                    else:
+                        data_to_import = json_data
                 else:
                     data_to_import = yaml.safe_load(file_content)
             except Exception as e:
@@ -208,13 +217,19 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         if text_import:
             try:
                 # Try JSON first
-                data_to_import = json.loads(text_import)
+                json_data= json.loads(text_import)
+                if type(json_data) is not list:
+                    data_to_import = [json_data]
+                else:
+                    data_to_import = json_data
             except json.JSONDecodeError:
                 try:
                     # Fallback to YAML
                     data_to_import = yaml.safe_load(text_import)
                 except yaml.YAMLError as e:
-                    raise ValueError("Input is not valid JSON or YAML.") from e
+                    st.error(f"Error loading text: {e}")
+            except Exception as e:
+                st.error(f"Error loading text: {e}")
 
         if data_to_import:
             result = call_api(

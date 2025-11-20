@@ -105,7 +105,7 @@ node PersonaInteractAction(InteractAction) {
         - Generate your own unique messages based on the agent role and desription
         - If the user request in in the list of agent capabilities but you are not capable of carrying out the request then set it as a complex request
         - Always use canned messages for complex requests and ask users to wait as you prepare to carry out their specific request or start the necessary processes.
-        - For miscellaneous messages, typically don't use canned responses (canned: false)
+        - For miscellaneous messages, do not use canned responses (canned: false)
         - Users giving their personal details, such as name and address, are considered miscellaneous
         - Never ask the user for additional details
 
@@ -496,7 +496,6 @@ These parameters have already been pre-filtered based on the interaction's conte
             else{
                 model_name = self.model_name;
             }
-            print("model name", model_name);
 
             model_action_result = model_action.call_model(
                 prompt_messages=prompt_messages,
@@ -572,13 +571,19 @@ These parameters have already been pre-filtered based on the interaction's conte
         # run other actions depending on parameters
 
         action_responses = [];
+        actions = [];
         visitor.frame_node.data_set(key="visitor_utterance", value=visitor.utterance);
 
         for parameter in parameters_list{
+            if parameter.get("action") not in actions{
+                actions.append(parameter.get("action"));
+            }
+        }
 
-            if parameter.get("action") and ('Interact' not in parameter.get("action")){
-                self.logger.info(f"Running action: {parameter.get("action")}");
-                action_node = self.get_agent().get_action(action_label=parameter.get("action"));
+        for action in actions{
+            if action and ('Interact' not in action){
+                self.logger.info(f"Running action: {action}");
+                action_node = self.get_agent().get_action(action_label=action);
                 if action_node {
 
                     access = True;
@@ -614,11 +619,11 @@ These parameters have already been pre-filtered based on the interaction's conte
                     self.logger.warning(f"Persona Run Action '{parameter.get("action")}' not found.");
                 }
             }
-            elif parameter.get("action") and ('Interact' in parameter.get("action")){
-                self.logger.info(f"Running interact action: {parameter.get("action")}");
-                action_node = self.get_agent().get_actions().get(action_label=parameter.get("action"));
+            elif action and ('Interact' in action){
+                self.logger.info(f"Running action: {action}");
+                action_node = self.get_agent().get_actions().get(action_label=action);
                 if action_node is None{
-                    self.logger.error(f"Action {parameter.get("action")} not found.");
+                    self.logger.error(f"Action {action} not found.");
                     continue;
                 }
                 if action_node.touch(visitor){
@@ -957,9 +962,6 @@ walker _import_parameter {
 
     can on_parameters with Parameters entry {
         for document_entry in self.document{
-            if type(document_entry) is not dict{
-                document_entry = json.loads(document_entry);
-            }
             if not [-->](`?ParameterEntry)(?condition == document_entry.get("condition")){
 
                 parameter = Parameter(
