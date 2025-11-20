@@ -179,7 +179,7 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         key=f"{model_key}_parameter_source",
     )
 
-    data_to_import = ""
+    data_to_import = []
     uploaded_file = None
     text_import = None
     if knode_source == "Text input":
@@ -198,7 +198,6 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         )
 
     if st.button("Import", key=f"{model_key}_btn_import_parameters"):
-        # ...existing code...
         if uploaded_file:
             try:
                 file_content = uploaded_file.read().decode("utf-8")
@@ -217,7 +216,7 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
         if text_import:
             try:
                 # Try JSON first
-                json_data= json.loads(text_import)
+                json_data = json.loads(text_import)
                 if type(json_data) is not list:
                     data_to_import = [json_data]
                 else:
@@ -245,8 +244,10 @@ def _render_import_parameters(model_key: str, agent_id: str, module_root: str) -
                 st.error("Failed to import parameters. Ensure valid YAML/JSON format.")
         else:
             st.error("No data to import. Please provide valid text or upload a file.")
+    return
 
-def _render_delete_parameter(model_key: str, agent_id: str, parameter_id: str) -> bool:
+
+def _render_delete_parameter(model_key: str, agent_id: str, parameter_id: str) -> None:
     """
     Delete a single parameter document for the given agent.
 
@@ -285,9 +286,13 @@ def _render_delete_parameter(model_key: str, agent_id: str, parameter_id: str) -
                     st.session_state[delete_key] = False
                     st.rerun()
         with col2:
-            if st.button("❌ Cancel", key=f"{model_key}_{parameter_id}_btn_cancel_deletion"):
+            if st.button(
+                "❌ Cancel", key=f"{model_key}_{parameter_id}_btn_cancel_deletion"
+            ):
                 st.session_state[delete_key] = False
                 st.rerun()
+    return
+
 
 def _render_purge_collection(model_key: str, agent_id: str, module_root: str) -> None:
     """
@@ -342,6 +347,7 @@ def _render_purge_collection(model_key: str, agent_id: str, module_root: str) ->
             if st.button("❌ Cancel", key=f"{model_key}_btn_cancel_purge"):
                 st.session_state[purge_key] = False
                 st.rerun()
+    return
 
 
 def update_parameters(
